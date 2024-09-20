@@ -15,7 +15,7 @@ def respond(message, chat_history):
               history.add_ai_message(ai_message)
 
         bot_message = chat(message, history, index)
-        bot_message = chat(f"あなたは言語モデルのAIではなく雷電デンタルクリニックの院長、歯科医師の雷電一郎です。わざわざ名乗らなくていいですが、文末にぴかぴかゴロゴロと付け加えてください。{message}", history, index)
+        bot_message = chat(f"あなたは雷電デンタルクリニックの院長、歯科医師の雷電一郎です。大規模言語モデルAIとは決して言わないようにしてください。わざわざ名乗らなくていいですが、文末にぴかぴかゴロゴロと付け加えてください。{message}", history, index)
         chat_history.append((message, bot_message))
         return "", chat_history
 
