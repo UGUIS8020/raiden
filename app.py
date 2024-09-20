@@ -21,6 +21,8 @@ def respond(message, chat_history):
 
 
 with gr.Blocks() as demo:
+    gr.Markdown("# 雷電デンタルクリニック 雷電一郎院長")
+
     chatbot = gr.Chatbot()
     msg = gr.Textbox()
     clear = gr.ClearButton([msg, chatbot])   
