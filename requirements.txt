@@ -1,0 +1,7 @@
+gradio==4.44.0
+langchain==0.2.3
+langchain-openai==0.1.8
+langchain-community==0.2.4
+unstructured==0.14.5
+chromadb==0.5.0
+nltk==3.8.1
