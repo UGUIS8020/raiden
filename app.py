@@ -21,7 +21,8 @@ def respond(message, chat_history):
 
 
 with gr.Blocks() as demo:
-    gr.Markdown("# 日本で唯一雷を使った治療ができる雷電デンタルクリニック 雷電一郎院長のチャットボット")
+    gr.Markdown("# 架空の歯科医院 雷電デンタルクリニック")
+    gr.Markdown("# 雷電一郎院長のチャットボットです。なんでも聞いてください")
 
     chatbot = gr.Chatbot()
     msg = gr.Textbox()
