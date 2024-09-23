@@ -96,7 +96,7 @@ def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
 
 
 def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapper) -> str:
-    llm = ChatOpenAI(model_name="gpt-4", temperature=0)
+    llm = ChatOpenAI(model_name="gpt-4o", temperature=0)
     tools = create_tools(index, llm)
     memory = ConversationBufferMemory(chat_memory=history, memory_key="chat_history", return_messages=True)
     agent_chain = initialize_agent(tools, llm, agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION, memory=memory)
