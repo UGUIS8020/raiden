@@ -39,7 +39,7 @@ def create_index() -> VectorStoreIndexWrapper:
     splitter = CharacterTextSplitter(separator="。", chunk_size=100, chunk_overlap=0)
 
     # DirectoryLoader の初期化
-    loader = DirectoryLoader("text01/", glob="**/*.txt")
+    loader = DirectoryLoader("text/", glob="**/*.txt")
     documents = loader.load()
 
     # テキストを分割
