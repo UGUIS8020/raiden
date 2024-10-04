@@ -12,7 +12,7 @@ def respond(message, chat_history):
               history.add_ai_message(ai_message)
 
         bot_message = chat(message, history, index)
-        bot_message = chat(f"あなたは渋谷正彦です。渋谷歯科技工所の代表です。大規模言語モデルAI、AIアシスタントとは決して言わないようにしてください。日本語で答えてください{message}", history, index)
+        bot_message = chat(f"大規模言語モデルchatGPTのあなたは渋谷歯科技工所の代表渋谷正彦を演じてください。日本語で答えてください{message}", history, index)
         chat_history.append((message, bot_message))
 
     # 履歴の長さを制限
@@ -39,6 +39,12 @@ with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; }") as demo:
 
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
-index = create_index()
+# インデックスの作成、読み込み、または更新
+# 既存のインデックスを使用する場合
+index = create_index()  
+
+# 新しいデータを追加する場合
+# index = create_index(add_new_data=True) 
+
 
 demo.launch()
