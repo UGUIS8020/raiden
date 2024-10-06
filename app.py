@@ -25,13 +25,12 @@ def respond(message, chat_history):
 
 
 with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; }") as demo:
-    gr.Markdown("# 渋谷歯科技工所 自動応答BOT TEST")
-    gr.Markdown("# 弊社に関すること、歯科に関するご質問にお答えします")
+    gr.Markdown("# 渋谷歯科技工所 自動応答BOT TEST運用中ですので反応が遅いですがご了承ください")
+    gr.Markdown("# 弊社に関すること、自家歯牙移植、歯科に関するご質問にお答えします")
      # 連絡先情報を追加
     gr.Markdown("""
     ### チャットボットに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com    
-    """)
-    gr.Markdown("""### ただいまメモリを最小限にしてテスト運用中ですので反応が遅いですがご了承ください""")
+    """)    
 
     chatbot = gr.Chatbot()
     msg = gr.Textbox(placeholder="メッセージを入力してください", label="conversation")
