@@ -11,8 +11,8 @@ def respond(message, chat_history):
               history.add_user_message(user_message)
               history.add_ai_message(ai_message)
 
-        bot_message = chat(message, history, index)
-        # bot_message = chat(f"あなたは渋谷歯科技工所の代表,渋谷正彦を演じてください。日本語で答えてください{message}", history, index)
+        # bot_message = chat(message, history, index)
+        bot_message = chat(f"あなたは渋谷歯科技工所の代表です。日本語で答えてください{message}", history, index)
         chat_history.append((message, bot_message))
 
     # 履歴の長さを制限
