@@ -5,3 +5,4 @@ langchain-community==0.2.4
 unstructured==0.14.5
 chromadb==0.5.0
 nltk==3.8.1
+pinecone-client==5.0.1
