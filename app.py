@@ -49,4 +49,5 @@ index = create_index()
 # index = create_index(add_new_data=True) 
 
 
-demo.launch(server_name="0.0.0.0", server_port=7860)
+demo.launch(server_name="0.0.0.0", server_port=7861)
+# demo.launch()
