@@ -5,6 +5,7 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 
 load_dotenv()
 
+
 def respond(message, chat_history):
         history = ChatMessageHistory()
         for [user_message, ai_message] in chat_history:
