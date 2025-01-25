@@ -7,7 +7,7 @@ from langchain.indexes import VectorstoreIndexCreator
 from langchain.indexes.vectorstore import VectorStoreIndexWrapper
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores.pinecone import Pinecone as PineconeVectorStore  # 変更
 from dotenv import load_dotenv
 import os
 from langchain.agents.agent_toolkits import VectorStoreToolkit, VectorStoreInfo
@@ -19,6 +19,7 @@ from langchain.agents import initialize_agent
 from langchain.agents import AgentType
 
 from langchain.text_splitter import CharacterTextSplitter
+from pinecone import Pinecone  # Pineconeクライアント
 
 langchain.verbose = True
 
@@ -27,35 +28,37 @@ load_dotenv()
 # langsmithを使うためのコード
 openai_api_key = os.getenv('OPENAI_API_KEY')
 LANGCHAIN_API_KEY = os.getenv('LANGCHAIN_API_KEY')
+PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 
 os.environ['LANGCHAIN_TRACING_V2'] = "true"
 os.environ['LANGCHAIN_ENDPOINT'] = "https://api.smith.langchain.com"
 os.environ['LANGCHAIN_PROJECT'] = "LangSmith-test"
 
+# Pinecone初期化
+pc = Pinecone(api_key=PINECONE_API_KEY)
+index_name = "shibuya"
+namespace_name = "test"
 
 
 def create_index() -> VectorStoreIndexWrapper:
-    # テキスト分割機能の設定
-    splitter = CharacterTextSplitter(separator="。", chunk_size=100, chunk_overlap=0)
+   # Pinecone初期化
+    pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
+    index = pc.Index("shibuya")
+    # 検索時のクエリembedding用に必要
+    embedding = OpenAIEmbeddings(model="text-embedding-3-large")  
+    
+    # インデックスの状態を表示
+    stats = index.describe_index_stats()
+    print(f"Total vectors in namespace '{namespace_name}': {stats.namespaces.get(namespace_name, {}).get('vector_count', 0)}")
+    
+    # vectorstoreを作成（namespaceを指定）
+    vectorstore = PineconeVectorStore(
+        index=index,
+        embedding=embedding,
+        text_key="text"  # メタデータ内のテキストフィールド
+    )
 
-    # DirectoryLoader の初期化
-    loader = DirectoryLoader("text/", glob="**/*.txt")
-    documents = loader.load()
-
-    # テキストを分割
-    split_docs = splitter.split_documents(documents)
-
-    # OpenAI の埋め込みモデル
-    embedding = OpenAIEmbeddings(openai_api_key=openai_api_key, model="text-embedding-3-large")
-
-    # Chroma VectorStore の初期化とデータの追加
-    vectorstore = Chroma(embedding_function=embedding, persist_directory="chroma_storage")
-    vectorstore.add_documents(split_docs)
-
-    # VectorStoreIndexWrapper の作成
-    index = VectorStoreIndexWrapper(vectorstore=vectorstore)
-
-    return index
+    return VectorStoreIndexWrapper(vectorstore=vectorstore)
 
 index = create_index()
 

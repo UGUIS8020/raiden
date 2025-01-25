@@ -12,7 +12,10 @@ def respond(message, chat_history):
               history.add_ai_message(ai_message)
 
         # bot_message = chat(message, history, index)
-        bot_message = chat(f"あなたは渋谷歯科技工所の代表です。日本語で答えてください{message}", history, index)
+        bot_message = chat(f"まずはPineconeに保存されているデータから検索して答えを探して、"
+                      f"見つからなければopenaiで回答してください。日本語で答えてください。{message}", 
+                      history, 
+                      index)
         chat_history.append((message, bot_message))
 
     # 履歴の長さを制限
@@ -25,7 +28,7 @@ def respond(message, chat_history):
 
 
 with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; }") as demo:
-    gr.Markdown("# 渋谷歯科技工所 自動応答BOT TEST運用中ですので反応が遅いですがご了承ください")
+    gr.Markdown("# 渋谷歯科技工所 自動応答BOT TEST運用中")
     gr.Markdown("# 弊社に関すること、自家歯牙移植、歯科に関するご質問にお答えします")
      # 連絡先情報を追加
     gr.Markdown("""
@@ -46,4 +49,5 @@ index = create_index()
 # index = create_index(add_new_data=True) 
 
 
-demo.launch()
+demo.launch(server_name="0.0.0.0", server_port=7861)
+# demo.launch()
