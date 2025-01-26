@@ -44,6 +44,7 @@ def create_index() -> VectorStoreIndexWrapper:
    # Pinecone初期化
     pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
     index = pc.Index("shibuya")
+    # index = pc.Index("text-search")
     # 検索時のクエリembedding用に必要
     embedding = OpenAIEmbeddings(model="text-embedding-3-large")  
     
