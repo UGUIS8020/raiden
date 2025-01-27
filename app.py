@@ -13,7 +13,7 @@ def respond(message, chat_history):
               history.add_ai_message(ai_message)
 
         # bot_message = chat(message, history, index)
-        bot_message = chat(f"まずはPineconeに保存されているデータから検索して答えを探して、"
+        bot_message = chat(f"専門的な話題はPineconeに保存されているデータから検索して答えを探してください、"
                       f"見つからなければopenaiで回答してください。日本語で答えてください。{message}", 
                       history, 
                       index)
