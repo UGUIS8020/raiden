@@ -12,11 +12,18 @@ def respond(message, chat_history):
               history.add_user_message(user_message)
               history.add_ai_message(ai_message)
 
-        # bot_message = chat(message, history, index)
-        bot_message = chat(f"専門的な話題はPineconeに保存されているデータから検索して答えを探してください、"
-                      f"見つからなければopenaiで回答してください。日本語で答えてください。{message}", 
-                      history, 
-                      index)
+        bot_message = chat(
+    f"""Pineconeに保存されているデータから検索を行い、以下の優先順位で回答を作成してください：
+
+        1. 質問内容に完全に一致する情報があれば、それを使用して回答してください。
+        2. 完全一致がない場合でも、質問に含まれる重要なキーワードや概念に関連する情報があれば、それらを組み合わせて回答を作成してください。
+        3. 部分的な情報しか見つからない場合は、見つかった情報を基に、その範囲で回答を作成してください。
+        4. 関連する情報が全く見つからない場合のみ、OpenAIを使用して回答を生成してください。
+
+        回答は必ず日本語で作成し、見つかった情報を可能な限り活用してください。質問: {message}""",
+            history,
+            index
+        )
         chat_history.append((message, bot_message))
 
     # 履歴の長さを制限
