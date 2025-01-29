@@ -38,24 +38,18 @@ def respond(message, chat_history):
 with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; }") as demo:
     gr.Markdown("# 渋谷歯科技工所 自動応答BOT TEST運用中")
     gr.Markdown("# 弊社に関すること、自家歯牙移植、歯科に関するご質問にお答えします")
-     # 連絡先情報を追加
+    # 連絡先情報を追加
     gr.Markdown("""
     ### チャットボットに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com    
     """)    
 
     chatbot = gr.Chatbot()
     msg = gr.Textbox(placeholder="メッセージを入力してください", label="conversation")
-    clear = gr.ClearButton([msg, chatbot])   
-
+    clear = gr.ClearButton([msg, chatbot])
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
-# インデックスの作成、読み込み、または更新
-# 既存のインデックスを使用する場合
-index = create_index()  
 
-# 新しいデータを追加する場合
-# index = create_index(add_new_data=True) 
-
-
+if __name__ == "__main__":
+    index = create_index()
 # demo.launch(server_name="0.0.0.0", server_port=7860)
-demo.launch()
+    demo.launch()
