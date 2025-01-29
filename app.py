@@ -49,7 +49,7 @@ with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; }") as demo:
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
 
-if __name__ == "__main__":
-    index = create_index()
+
+index = create_index()
 # demo.launch(server_name="0.0.0.0", server_port=7860)
-    demo.launch()
+demo.launch()
