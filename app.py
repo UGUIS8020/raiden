@@ -36,7 +36,7 @@ def respond(message, chat_history):
 
 
 with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; }") as demo:
-    gr.Markdown("# 渋谷歯科技工所 自動応答BOT TEST運用中")
+    gr.Markdown("# 渋谷歯科技工所 自動応答BOT")
     gr.Markdown("# 弊社に関すること、自家歯牙移植、歯科に関するご質問にお答えします")
     # 連絡先情報を追加
     gr.Markdown("""
