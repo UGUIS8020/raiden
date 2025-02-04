@@ -35,11 +35,12 @@ def respond(message, chat_history):
         return "", chat_history, history
 
 
-with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; }") as demo:
-    gr.Markdown("# 渋谷歯科技工所 自動応答BOT")
-    gr.Markdown("# 自家歯牙移植、歯牙再植について専門的に応対するチャットボットです。お試しください")
+# with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; border: 2px solid #2c3e50; }") as demo:
+with gr.Blocks(css=".gradio-container {background-color: #FFE4B5}") as demo:
+    gr.Markdown("## 渋谷歯科技工所 自動応答BOT")
+    gr.Markdown("## 自家歯牙移植、歯牙再植について専門的に応対するチャットボット")
     # 連絡先情報を追加
-    gr.Markdown("# 機能を追加したRAIDEN.v2も近日公開予定")
+    gr.Markdown("## 機能を追加 RAIDEN.v2:近日公開予定")
     gr.Markdown("""
     ### チャットボットに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com    
     """)    
