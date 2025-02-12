@@ -36,7 +36,7 @@ os.environ['LANGCHAIN_PROJECT'] = "LangSmith-test"
 
 # Pinecone初期化
 pc = Pinecone(api_key=PINECONE_API_KEY)
-index_name = "raiden"
+index_name = "text-search"
 namespace_name = "test"
 
 
