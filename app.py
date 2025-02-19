@@ -51,6 +51,5 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     clear = gr.ClearButton([msg, chatbot])
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
-
 if __name__ == "__main__":
     demo.launch()
