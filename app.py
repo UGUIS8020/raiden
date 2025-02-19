@@ -5,6 +5,7 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 
 load_dotenv()
 
+index = create_index()
 
 def respond(message, chat_history):
         history = ChatMessageHistory()
@@ -52,6 +53,4 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
 
 
 if __name__ == "__main__":
-    index = create_index()
-# demo.launch(server_name="0.0.0.0", server_port=7860)
     demo.launch()
