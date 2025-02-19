@@ -2,8 +2,7 @@ import langchain
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_message_histories import ChatMessageHistory
 
-from langchain_community.document_loaders import DirectoryLoader
-from langchain.indexes import VectorstoreIndexCreator
+# from langchain_community.document_loaders import DirectoryLoader  # この行も削除
 from langchain.indexes.vectorstore import VectorStoreIndexWrapper
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -37,26 +36,21 @@ os.environ['LANGCHAIN_PROJECT'] = "LangSmith-test"
 # Pinecone初期化
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index_name = "raiden"
-namespace_name = "test"
 
 
 def create_index() -> VectorStoreIndexWrapper:
-   # Pinecone初期化
     pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
-    index = pc.Index("raiden")
-    # index = pc.Index("text-search")
-    # 検索時のクエリembedding用に必要
-    embedding = OpenAIEmbeddings(model="text-embedding-3-small")  
+    index = pc.Index(index_name)
+    embedding = OpenAIEmbeddings(model="text-embedding-3-small")
     
-    # インデックスの状態を表示
+    # namespaceに関する統計表示を削除
     stats = index.describe_index_stats()
-    print(f"Total vectors in namespace '{namespace_name}': {stats.namespaces.get(namespace_name, {}).get('vector_count', 0)}")
+    print(f"Total vectors in index: {stats.total_vector_count}")
     
-    # vectorstoreを作成（namespaceを指定）
-    vectorstore = PineconeVectorStore(
-        index=index,
+    vectorstore = PineconeVectorStore.from_existing_index(
+        index_name=index_name,
         embedding=embedding,
-        text_key="text"  # メタデータ内のテキストフィールド
+        text_key="text"  # namespaceパラメータを削除
     )
 
     return VectorStoreIndexWrapper(vectorstore=vectorstore)
