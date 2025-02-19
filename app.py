@@ -39,7 +39,7 @@ def respond(message, chat_history):
 # with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; border: 2px solid #2c3e50; }") as demo:
 with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as demo:
     gr.Markdown("## 渋谷歯科技工所 BOT")
-    gr.Markdown("## 自家歯牙移植、歯牙再植について専門的に応対するチャットボット")
+    gr.Markdown("## 自家歯牙移植、歯牙再植について専門的に応対します")
     # 連絡先情報を追加
     gr.Markdown("## 機能を追加 RAIDEN.v2:近日公開予定")
     gr.Markdown("""
