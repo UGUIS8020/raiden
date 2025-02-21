@@ -37,6 +37,15 @@ os.environ['LANGCHAIN_PROJECT'] = "LangSmith-test"
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index_name = "raiden"
 
+# グローバル変数の最適化
+llm = ChatOpenAI(
+    model_name="gpt-4",
+    temperature=0,
+    max_tokens=256,
+    request_timeout=30  # タイムアウトを設定
+)
+
+tools = None
 
 def create_index() -> VectorStoreIndexWrapper:
     pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
@@ -70,10 +79,37 @@ def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
 
 
 def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapper) -> str:
-    llm = ChatOpenAI(model_name="gpt-4o", temperature=0)
-    tools = create_tools(index, llm)
-    memory = ConversationBufferMemory(chat_memory=history, memory_key="chat_history", return_messages=True)
-    agent_chain = initialize_agent(tools, llm, agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION, memory=memory)
+    global tools
+    if tools is None:
+        tools = create_tools(index, llm)
     
-   
-    return agent_chain.run(input=message)
+    memory = ConversationBufferMemory(
+        chat_memory=history,
+        memory_key="chat_history",
+        return_messages=True
+    )
+    
+    agent_chain = initialize_agent(
+        tools,
+        llm,
+        agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+        memory=memory,
+        max_iterations=2,
+        verbose=False
+    )
+    
+    try:
+        return agent_chain.run(input=message)
+    except Exception as e:
+        print(f"Error: {e}")
+        return "申し訳ありません。もう一度質問してください。"
+
+def respond(message: str, history: list) -> tuple[str, list]:
+    chat_history = ChatMessageHistory()
+    for human, ai in history:
+        chat_history.add_user_message(human)
+        chat_history.add_ai_message(ai)
+    
+    response = chat(message, chat_history, index)
+    # タプルで2つの値のみを返す
+    return response, history + [[message, response]]

@@ -14,7 +14,7 @@ def respond(message, chat_history):
               history.add_ai_message(ai_message)
 
         bot_message = chat(
-    f"""Pineconeに保存されているデータから検索を行い、以下の優先順位で回答を作成してください：
+    f"""以下の優先順位で回答を作成してください：
 
         1. 質問内容におおよそ一致する情報があれば、それを要約して回答してください。
         2. 完全一致がない場合でも、質問に含まれる重要なキーワードや概念に関連する情報があれば、それらを組み合わせて要約して回答を作成してください。
@@ -28,7 +28,7 @@ def respond(message, chat_history):
         chat_history.append((message, bot_message))
 
     # 履歴の長さを制限
-        MAX_HISTORY_LENGTH = 5
+        MAX_HISTORY_LENGTH = 4
         if len(chat_history) > MAX_HISTORY_LENGTH:
             chat_history = chat_history[-MAX_HISTORY_LENGTH:]
             history.messages = history.messages[-(MAX_HISTORY_LENGTH * 2):]
@@ -52,5 +52,5 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(server_name="127.0.0.1", server_port=7860)
     # demo.launch()
