@@ -64,7 +64,7 @@ def create_index() -> VectorStoreIndexWrapper:
 
     return VectorStoreIndexWrapper(vectorstore=vectorstore)
 
-index = create_index()
+# index = create_index()
 
 def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
     
@@ -94,7 +94,7 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
         llm,
         agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
         memory=memory,
-        max_iterations=2,
+        max_iterations=3,
         verbose=False
     )
     
@@ -110,6 +110,6 @@ def respond(message: str, history: list) -> tuple[str, list]:
         chat_history.add_user_message(human)
         chat_history.add_ai_message(ai)
     
-    response = chat(message, chat_history, index)
+    response = chat(message, chat_history, get_index())
     # タプルで2つの値のみを返す
     return response, history + [[message, response]]
