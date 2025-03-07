@@ -18,7 +18,7 @@ from langchain.agents import AgentType
 from langchain.text_splitter import CharacterTextSplitter
 from pinecone import Pinecone  # Pineconeクライアント
 
-langchain.verbose = False
+langchain.verbose = True
 
 load_dotenv()
 
