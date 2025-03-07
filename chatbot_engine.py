@@ -1,8 +1,6 @@
 import langchain
 from langchain_openai import ChatOpenAI
 from langchain_community.chat_message_histories import ChatMessageHistory
-
-# from langchain_community.document_loaders import DirectoryLoader  # この行も削除
 from langchain.indexes.vectorstore import VectorStoreIndexWrapper
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -20,7 +18,7 @@ from langchain.agents import AgentType
 from langchain.text_splitter import CharacterTextSplitter
 from pinecone import Pinecone  # Pineconeクライアント
 
-langchain.verbose = True
+langchain.verbose = False
 
 load_dotenv()
 
@@ -37,15 +35,16 @@ os.environ['LANGCHAIN_PROJECT'] = "LangSmith-test"
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index_name = "raiden"
 
+# グローバル変数の最適化
+llm = ChatOpenAI(model_name="gpt-4", temperature=0.5,)
+tools = None
 
-def create_index() -> VectorStoreIndexWrapper:
-    pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
+def create_index() -> VectorStoreIndexWrapper:    
     index = pc.Index(index_name)
     embedding = OpenAIEmbeddings(model="text-embedding-3-small")
     
-    # namespaceに関する統計表示を削除
     stats = index.describe_index_stats()
-    print(f"Total vectors in index: {stats.total_vector_count}")
+    print(f"Total vectors in index: {stats.total_vector_count}")    
     
     vectorstore = PineconeVectorStore.from_existing_index(
         index_name=index_name,
@@ -55,7 +54,15 @@ def create_index() -> VectorStoreIndexWrapper:
 
     return VectorStoreIndexWrapper(vectorstore=vectorstore)
 
-index = create_index()
+# 直接 create_index() を呼び出さず、キャッシュを使うようにする
+_index = None
+
+def get_index() -> VectorStoreIndexWrapper:
+    """`create_index()` を1回だけ実行するようにする"""
+    global _index
+    if _index is None:
+        _index = create_index()
+    return _index
 
 def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
     
@@ -70,10 +77,27 @@ def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
 
 
 def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapper) -> str:
-    llm = ChatOpenAI(model_name="gpt-4o", temperature=0)
-    tools = create_tools(index, llm)
-    memory = ConversationBufferMemory(chat_memory=history, memory_key="chat_history", return_messages=True)
-    agent_chain = initialize_agent(tools, llm, agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION, memory=memory)
+    global tools
+    if tools is None:
+        tools = create_tools(index, llm)
     
-   
-    return agent_chain.run(input=message)
+    memory = ConversationBufferMemory(
+        chat_memory=history,
+        memory_key="chat_history",
+        return_messages=True
+    )
+    
+    agent_chain = initialize_agent(
+        tools,
+        llm,
+        agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+        memory=memory,
+        max_iterations=4,
+        verbose=False
+    )
+    
+    try:
+        return agent_chain.run(input=message)
+    except Exception as e:
+        print(f"Error: {e}")
+        return "申し訳ありません。もう一度質問してください。"
