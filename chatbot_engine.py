@@ -17,8 +17,9 @@ from langchain.agents import AgentType
 
 from langchain.text_splitter import CharacterTextSplitter
 from pinecone import Pinecone  # Pineconeクライアント
+import time
 
-langchain.verbose = False
+langchain.verbose = True
 
 load_dotenv()
 
@@ -65,11 +66,14 @@ def get_index() -> VectorStoreIndexWrapper:
     return _index
 
 def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
-    
     vectorstore_info = VectorStoreInfo(
         name="test_text_code",
         description="A collection of text documents for testing purposes.",
-        vectorstore=index.vectorstore,        
+        vectorstore=index.vectorstore, k=9,
+        search_kwargs={
+            "filter": None,
+            "fetch_k": 55,            
+        }
     )
     
     toolkit = VectorStoreToolkit(vectorstore_info=vectorstore_info, llm=llm)
@@ -77,27 +81,39 @@ def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
 
 
 def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapper) -> str:
+    start_time = time.time()
+    
     global tools
     if tools is None:
+        tool_start = time.time()
         tools = create_tools(index, llm)
+        print(f"Tool initialization time: {time.time() - tool_start:.2f}s")
     
+    memory_start = time.time()
     memory = ConversationBufferMemory(
         chat_memory=history,
         memory_key="chat_history",
         return_messages=True
     )
+    print(f"Memory setup time: {time.time() - memory_start:.2f}s")
     
+    agent_start = time.time()
     agent_chain = initialize_agent(
         tools,
         llm,
         agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
         memory=memory,
         max_iterations=4,
-        verbose=False
+        verbose=True
     )
+    print(f"Agent initialization time: {time.time() - agent_start:.2f}s")
     
     try:
-        return agent_chain.run(input=message)
+        invoke_start = time.time()
+        result = agent_chain.invoke(input=message)
+        print(f"Agent execution time: {time.time() - invoke_start:.2f}s")
+        print(f"Total processing time: {time.time() - start_time:.2f}s")
+        return result['output']
     except Exception as e:
         print(f"Error: {e}")
         return "申し訳ありません。もう一度質問してください。"

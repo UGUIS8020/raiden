@@ -16,8 +16,7 @@ def respond(message, chat_history):
         bot_message = chat(f"""
         1. 専門知識に基づき、質問に最も関連する情報を要約して回答してください。        
         2. 回答は日本語で作成し、結論と臨床的な参考事例を簡潔に含めてください。
-        3. 直接関連する情報がない場合は、最も近い情報を提供し、その旨を明示してください。
-        4. 質問内容が曖昧または情報が不足している場合は、より正確な回答のために必要な追加情報について質問してください。
+        3. 直接関連する情報がない場合は、最も近い情報を提供し、その旨を明示してください。        
 
         質問: {message}""",
             history,
@@ -43,7 +42,7 @@ def respond(message, chat_history):
 with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as demo:    
     gr.Markdown("## 自家歯牙移植、歯牙再植について専門的に応対します")
     # 連絡先情報を追加
-    gr.Markdown("## ただいまテスト中。機能を追加 RAIDEN.v2:近日公開予定")
+    gr.Markdown("## RAIDEN.v1.52 :RAIDEN.v2.0:近日公開予定")
     gr.Markdown("""
     ### チャットボットに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com    
     """)    
@@ -53,6 +52,9 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     clear = gr.ClearButton([msg, chatbot])
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
+# if __name__ == "__main__":
+#     demo.launch(server_name="0.0.0.0", server_port=7860)
+
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860)
-    # demo.launch()
+    demo.launch(server_name="127.0.0.1", server_port=7860)
+    
