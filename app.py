@@ -52,9 +52,9 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     clear = gr.ClearButton([msg, chatbot])
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
-# if __name__ == "__main__":
-#     demo.launch(server_name="0.0.0.0", server_port=7860)
-
 if __name__ == "__main__":
-    demo.launch(server_name="127.0.0.1", server_port=7860)
+    demo.launch(server_name="0.0.0.0", server_port=7860)
+
+# if __name__ == "__main__":
+#     demo.launch(server_name="127.0.0.1", server_port=7860)
     
