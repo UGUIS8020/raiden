@@ -72,7 +72,7 @@ def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
         vectorstore=index.vectorstore, k=9,
         search_kwargs={
             "filter": None,
-            "fetch_k": 55,            
+            "fetch_k": 54,            
         }
     )
     
