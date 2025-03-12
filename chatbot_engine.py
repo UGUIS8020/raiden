@@ -68,15 +68,20 @@ def get_index() -> VectorStoreIndexWrapper:
 def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
     vectorstore_info = VectorStoreInfo(
         name="test_text_code",
-        description="A collection of text documents for testing purposes.",
-        vectorstore=index.vectorstore, k=9,
+        description="医療・歯科関連の専門知識を含むデータベースです。歯科に関係することは常に使用して回答してください。",
+        vectorstore=index.vectorstore, k=25,
         search_kwargs={
             "filter": None,
-            "fetch_k": 54,            
+            "fetch_k": 55,   
+            "lambda_mult": 0.6,  # 関連性と多様性のバランスを調整
+            "score_threshold": 0.6  # 類似度スコアの閾値         
         }
     )
     
-    toolkit = VectorStoreToolkit(vectorstore_info=vectorstore_info, llm=llm)
+    toolkit = VectorStoreToolkit(
+        vectorstore_info=vectorstore_info, 
+        llm=llm,        
+    )
     return toolkit.get_tools()
 
 
@@ -88,12 +93,15 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
         tool_start = time.time()
         tools = create_tools(index, llm)
         print(f"Tool initialization time: {time.time() - tool_start:.2f}s")
+        if len(tools) == 0:
+            print("Warning: No tools were created")
     
     memory_start = time.time()
     memory = ConversationBufferMemory(
         chat_memory=history,
         memory_key="chat_history",
-        return_messages=True
+        return_messages=True,
+        output_key="output"  # 出力キーを明示的に指定
     )
     print(f"Memory setup time: {time.time() - memory_start:.2f}s")
     
@@ -103,7 +111,8 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
         llm,
         agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
         memory=memory,
-        max_iterations=4,
+        max_iterations=6,
+        early_stopping_method="generate",
         verbose=True
     )
     print(f"Agent initialization time: {time.time() - agent_start:.2f}s")
