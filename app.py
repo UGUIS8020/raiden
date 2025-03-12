@@ -16,7 +16,8 @@ def respond(message, chat_history):
         bot_message = chat(f"""
         1. 専門知識に基づき、質問に最も関連する情報を要約して回答してください。        
         2. 回答は日本語で作成し、結論と臨床的な参考事例を簡潔に含めてください。
-        3. 直接関連する情報がない場合は、最も近い情報を提供し、その旨を明示してください。        
+        3. 直接関連する情報がない場合は、最も近い情報を提供し、その旨を明示してください。
+        4. 歯科医療に関する質問（歯牙移植、歯科治療、歯科技工所など）は非常に専門的であるため、必ずベクトル検索ツールを使用して情報を取得してください。自身の知識だけで回答せず、必ずツールを使用してください。        
 
         質問: {message}""",
             history,
@@ -40,7 +41,7 @@ def respond(message, chat_history):
 
 # with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; border: 2px solid #2c3e50; }") as demo:
 with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as demo:    
-    gr.Markdown("## 自家歯牙移植、歯牙再植、歯科全般について専門的に応答します")
+    gr.Markdown("## 自家歯牙移植、歯牙再植、歯科全般について応答します")
     # 連絡先情報を追加
     gr.Markdown("## RAIDEN v1.310")
     gr.Markdown("""
