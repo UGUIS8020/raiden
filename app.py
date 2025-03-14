@@ -71,7 +71,7 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     ### Chatbotに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com    
     """)    
 
-    chatbot = gr.Chatbot()
+    chatbot = gr.Chatbot(autoscroll=True)
     msg = gr.Textbox(placeholder="メッセージを入力してください", label="conversation")
     clear = gr.ClearButton([msg, chatbot])
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
