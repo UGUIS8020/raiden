@@ -4,7 +4,7 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain.indexes.vectorstore import VectorStoreIndexWrapper
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_community.vectorstores.pinecone import Pinecone as PineconeVectorStore  # 変更
+from langchain_community.vectorstores.pinecone import Pinecone as PineconeVectorStore
 from dotenv import load_dotenv
 import os
 from langchain.agents.agent_toolkits import VectorStoreToolkit, VectorStoreInfo
@@ -16,8 +16,11 @@ from langchain.agents import initialize_agent
 from langchain.agents import AgentType
 
 from langchain.text_splitter import CharacterTextSplitter
-from pinecone import Pinecone  # Pineconeクライアント
+from pinecone import Pinecone
 import time
+
+# chatbot_utilsからの関数インポート
+from chatbot_utils import check_previous_responses
 
 langchain.verbose = True
 
@@ -37,7 +40,7 @@ pc = Pinecone(api_key=PINECONE_API_KEY)
 index_name = "raiden"
 
 # グローバル変数の最適化
-llm = ChatOpenAI(model_name="gpt-4", temperature=0.5,)
+llm = ChatOpenAI(model_name="gpt-4", temperature=0,)
 tools = None
 
 def create_index() -> VectorStoreIndexWrapper:    
@@ -50,7 +53,7 @@ def create_index() -> VectorStoreIndexWrapper:
     vectorstore = PineconeVectorStore.from_existing_index(
         index_name=index_name,
         embedding=embedding,
-        text_key="text"  # namespaceパラメータを削除
+        text_key="text"  
     )
 
     return VectorStoreIndexWrapper(vectorstore=vectorstore)
@@ -69,12 +72,12 @@ def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
     vectorstore_info = VectorStoreInfo(
         name="test_text_code",
         description="医療・歯科関連の専門知識を含むデータベースです。歯科に関係することは常に使用して回答してください。",
-        vectorstore=index.vectorstore, k=25,
+        vectorstore=index.vectorstore, k=15,
         search_kwargs={
             "filter": None,
-            "fetch_k": 55,   
-            "lambda_mult": 0.6,  # 関連性と多様性のバランスを調整
-            "score_threshold": 0.6  # 類似度スコアの閾値         
+            "fetch_k": 40,   
+            "lambda_mult": 0.65,  # 関連性と多様性のバランスを調整
+            "score_threshold": 0.65  # 類似度スコアの閾値         
         }
     )
     
@@ -87,7 +90,7 @@ def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
 
 def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapper) -> str:
     start_time = time.time()
-    
+
     global tools
     if tools is None:
         tool_start = time.time()
@@ -95,16 +98,16 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
         print(f"Tool initialization time: {time.time() - tool_start:.2f}s")
         if len(tools) == 0:
             print("Warning: No tools were created")
-    
+
     memory_start = time.time()
     memory = ConversationBufferMemory(
         chat_memory=history,
         memory_key="chat_history",
         return_messages=True,
-        output_key="output"  # 出力キーを明示的に指定
+        output_key="output"
     )
     print(f"Memory setup time: {time.time() - memory_start:.2f}s")
-    
+
     agent_start = time.time()
     agent_chain = initialize_agent(
         tools,
@@ -116,13 +119,14 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
         verbose=True
     )
     print(f"Agent initialization time: {time.time() - agent_start:.2f}s")
-    
+
     try:
         invoke_start = time.time()
         result = agent_chain.invoke(input=message)
         print(f"Agent execution time: {time.time() - invoke_start:.2f}s")
         print(f"Total processing time: {time.time() - start_time:.2f}s")
         return result['output']
+
     except Exception as e:
         print(f"Error: {e}")
         return "申し訳ありません。もう一度質問してください。"
