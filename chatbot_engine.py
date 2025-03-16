@@ -14,15 +14,15 @@ from langchain.tools import BaseTool
 from langchain.memory import ConversationBufferMemory
 from langchain.agents import initialize_agent
 from langchain.agents import AgentType
-
-from langchain.text_splitter import CharacterTextSplitter
 from pinecone import Pinecone
 import time
+
+from custom import CustomVectorStoreQATool
 
 # chatbot_utilsからの関数インポート
 from chatbot_utils import check_previous_responses
 
-langchain.verbose = True
+langchain.verbose = False
 
 load_dotenv()
 
@@ -76,21 +76,25 @@ def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
         search_kwargs={
             "filter": None,
             "fetch_k": 40,   
-            "lambda_mult": 0.65,  # 関連性と多様性のバランスを調整
-            "score_threshold": 0.65  # 類似度スコアの閾値         
+            "lambda_mult": 0.55,  # 関連性と多様性のバランスを調整
+            "score_threshold": 0.55  # 類似度スコアの閾値         
         }
     )
     
-    toolkit = VectorStoreToolkit(
-        vectorstore_info=vectorstore_info, 
-        llm=llm,        
+    # カスタムツールを使う
+    qa_tool = CustomVectorStoreQATool(
+        name=vectorstore_info.name,
+        description=vectorstore_info.description,
+        vectorstore=vectorstore_info.vectorstore,
+        llm=llm,       
     )
-    return toolkit.get_tools()
+
+    return [qa_tool]
 
 
 def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapper) -> str:
     start_time = time.time()
-
+    
     global tools
     if tools is None:
         tool_start = time.time()
@@ -98,7 +102,21 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
         print(f"Tool initialization time: {time.time() - tool_start:.2f}s")
         if len(tools) == 0:
             print("Warning: No tools were created")
+    
+    # ここでPinecone検索の挙動を確認してみる！
+    print("\n========== Pinecone Vector Search (Logging) ==========")
+    query_text = message  # ユーザーのメッセージそのまま検索に使う
+    results = index.vectorstore.similarity_search_with_score(query_text, k=10)
 
+    for i, (doc, score) in enumerate(results):
+        print(f"\n--- Result {i+1} ---")
+        print(f"Score: {score}")
+        print(f"Content (preview): {doc.page_content[:300]}")  # 長すぎる場合は300文字でカット
+        print(f"Metadata: {doc.metadata}")
+    
+    print("=====================================================\n")
+
+    # 通常通りメモリをセットしてエージェント実行
     memory_start = time.time()
     memory = ConversationBufferMemory(
         chat_memory=history,
@@ -125,8 +143,12 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
         result = agent_chain.invoke(input=message)
         print(f"Agent execution time: {time.time() - invoke_start:.2f}s")
         print(f"Total processing time: {time.time() - start_time:.2f}s")
-        return result['output']
 
+        print(f"\n[Agent Output]: {result.get('output', 'No output')}")
+
+        return result['output']
     except Exception as e:
         print(f"Error: {e}")
         return "申し訳ありません。もう一度質問してください。"
+    
+    
