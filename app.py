@@ -30,8 +30,8 @@ def respond(message, chat_history):
         print("キャッシュヒットなし。LLMで新規回答を生成します")
 
         prompt = f"""
-        1. 専門知識に基づき、質問に最も関連する情報を要約して回答してください。        
-        2. 回答は日本語で作成し、結論と臨床的な参考事例を簡潔に含めてください。
+        1. 専門知識に基づき、質問に関連する情報を要約して回答してください。        
+        2. 回答は日本語で作成し、結論と臨床的な参考事例を含めてください。
         3. 直接関連する情報がない場合は、最も近い情報を提供し、その旨を明示してください。
         4. 歯科医療に関する質問（歯牙移植、歯科治療、歯科技工所など）は非常に専門的であるため、必ずベクトル検索ツールを使用してください。自身の知識だけで回答せず、必ずツールを使用してください。
 
@@ -76,11 +76,11 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     clear = gr.ClearButton([msg, chatbot])
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
-if __name__ == "__main__":
-    index = get_index()
-    demo.launch(server_name="0.0.0.0", server_port=7860)
-
 # if __name__ == "__main__":
 #     index = get_index()
-#     demo.launch(server_name="127.0.0.1", server_port=7860)
+#     demo.launch(server_name="0.0.0.0", server_port=7860)
+
+if __name__ == "__main__":
+    index = get_index()
+    demo.launch(server_name="127.0.0.1", server_port=7860)
     
