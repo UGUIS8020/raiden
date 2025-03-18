@@ -26,7 +26,7 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
 
         # retrieverにkを渡す
         retriever = self.vectorstore.as_retriever(
-            search_kwargs={"k": 11}  # ← ここを可変にしてもOK！
+            search_kwargs={"k": 13}  # ← ここを可変にしてもOK！
         )
 
         chain = RetrievalQA.from_chain_type(
@@ -48,7 +48,7 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
         from langchain.chains.retrieval_qa.base import RetrievalQA
 
         retriever = self.vectorstore.as_retriever(
-            search_kwargs={"k": 11}
+            search_kwargs={"k": 13}
         )
 
         chain = RetrievalQA.from_chain_type(
