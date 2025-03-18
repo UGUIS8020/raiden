@@ -106,12 +106,12 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
     # ここでPinecone検索の挙動を確認してみる！
     print("\n========== Pinecone Vector Search (Logging) ==========")
     query_text = message  # ユーザーのメッセージそのまま検索に使う
-    results = index.vectorstore.similarity_search_with_score(query_text, k=12)
+    results = index.vectorstore.similarity_search_with_score(query_text, k=15)
 
     for i, (doc, score) in enumerate(results):
         print(f"\n--- Result {i+1} ---")
         print(f"Score: {score}")
-        print(f"Content (preview): {doc.page_content[:300]}")  # 長すぎる場合は300文字でカット
+        print(f"Content (preview): {doc.page_content[:50]}")  # 長すぎる場合は300文字でカット
         print(f"Metadata: {doc.metadata}")
     
     print("=====================================================\n")

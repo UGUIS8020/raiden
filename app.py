@@ -16,14 +16,15 @@ def respond(message, chat_history):
         history.add_user_message(user_message)
         history.add_ai_message(ai_message)
 
-    # 1. キャッシュ検索（過去回答の検索）
+      # 1. キャッシュ検索（過去回答の検索）
     cached_result = search_cached_answer(message)
+    # cached_result = {"found": False}
 
     if cached_result.get("found"):        
         bot_message = cached_result["answer"]
          # 応答時間を計測して表示
         elapsed_time = time.time() - start_time
-        print(f"キャッシュヒット！保存済み回答を返します (応答時間: {elapsed_time:.3f}秒)")
+        # print(f"キャッシュヒット！保存済み回答を返します (応答時間: {elapsed_time:.3f}秒)")
 
     else:
         # 3. キャッシュヒットしなかった場合 → 新規回答を生成
