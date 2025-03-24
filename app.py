@@ -69,7 +69,7 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     # 連絡先情報を追加
     gr.Markdown("## RAIDEN v1.320")  # バージョン番号を更新
     gr.Markdown("""
-    ### Chatbotに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com    
+    ### Chatbotに関するご意見,ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com    
     """)    
 
     chatbot = gr.Chatbot(autoscroll=True)
