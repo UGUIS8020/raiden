@@ -68,9 +68,9 @@ def respond(message, chat_history):
 
 # with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; border: 2px solid #2c3e50; }") as demo:
 with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as demo:    
-    gr.Markdown("## 自家歯牙移植、歯牙再植、歯科全般について応答します")
+    # gr.Markdown("## 自家歯牙移植、歯牙再植に専門的に応答します")
     # 連絡先情報を追加
-    gr.Markdown("## RAIDEN v1.320")  # バージョン番号を更新
+    gr.Markdown("## RAIDEN v2.0")  # バージョン番号を更新
     gr.Markdown("""
     ### Chatbotに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com    
     """)    
