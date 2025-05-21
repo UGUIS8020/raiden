@@ -37,7 +37,7 @@ os.environ['LANGCHAIN_PROJECT'] = "LangSmith-test"
 
 # Pinecone初期化
 pc = Pinecone(api_key=PINECONE_API_KEY)
-index_name = "raiden"
+index_name = "raiden-main"
 
 # グローバル変数の最適化
 llm = ChatOpenAI(model_name="gpt-4", temperature=0,)
@@ -53,7 +53,7 @@ def create_index() -> VectorStoreIndexWrapper:
     vectorstore = PineconeVectorStore.from_existing_index(
         index_name=index_name,
         embedding=embedding,
-        text_key="text"  
+        text_key="text"
     )
 
     return VectorStoreIndexWrapper(vectorstore=vectorstore)
@@ -72,12 +72,12 @@ def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
     vectorstore_info = VectorStoreInfo(
         name="test_text_code",
         description="医療・歯科関連の専門知識を含むデータベースです。歯科に関係することは常に使用して回答してください。",
-        vectorstore=index.vectorstore, k=15,
+        vectorstore=index.vectorstore,
         search_kwargs={
             "filter": None,
             "fetch_k": 40,   
-            "lambda_mult": 0.55,  # 関連性と多様性のバランスを調整
-            "score_threshold": 0.55  # 類似度スコアの閾値         
+            "lambda_mult": 0.6,  # 関連性と多様性のバランスを調整
+            "score_threshold": 0.6  # 類似度スコアの閾値         
         }
     )
     
@@ -104,18 +104,29 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
             print("Warning: No tools were created")
     
     # ここでPinecone検索の挙動を確認してみる！
-    print("\n========== Pinecone Vector Search (Logging) ==========")
-    query_text = message  # ユーザーのメッセージそのまま検索に使う
-    results = index.vectorstore.similarity_search_with_score(query_text, k=15)
-
-    for i, (doc, score) in enumerate(results):
-        print(f"\n--- Result {i+1} ---")
-        print(f"Score: {score}")
-        print(f"Content (preview): {doc.page_content[:50]}")  # 長すぎる場合は300文字でカット
-        print(f"Metadata: {doc.metadata}")
+    DEBUG = False
     
-    print("=====================================================\n")
+    if DEBUG:
+        print("\n========== Pinecone Vector Search (Logging) ==========")
+        query_text = message
+        results = index.vectorstore.similarity_search_with_score(
+            query_text, 
+            k=15
+        )
 
+        for i, (doc, score) in enumerate(results):
+            print(f"\n--- Result {i+1} ---")
+            print(f"Score: {score}")          
+            
+            # ベクトルIDの取得方法を複数試す
+            print(f"VectorID: {doc.metadata.get('vector_id', 'N/A')}")        
+            print(f"Content: {doc.page_content[:50]}")
+            # メタデータから有用な情報を表示
+            print(f"type: {doc.metadata.get('type', 'N/A')}")
+            print(f"Category: {doc.metadata.get('category', 'N/A')}")        
+
+        print("=====================================================\n")
+    
     # 通常通りメモリをセットしてエージェント実行
     memory_start = time.time()
     memory = ConversationBufferMemory(
