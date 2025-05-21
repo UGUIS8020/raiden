@@ -2,7 +2,8 @@ import gradio as gr
 from chatbot_engine import chat, get_index
 from dotenv import load_dotenv
 from langchain_community.chat_message_histories import ChatMessageHistory
-from chatbot_utils import store_response_in_pinecone,search_cached_answer
+from chatbot_utils import store_response_in_pinecone, search_cached_answer
+from cache_manager import setup_cache_cleanup_scheduler
 import time
 
 load_dotenv()
@@ -22,7 +23,7 @@ def respond(message, chat_history):
 
     if cached_result.get("found"):        
         bot_message = cached_result["answer"]
-         # 応答時間を計測して表示
+        # 応答時間を計測して表示
         elapsed_time = time.time() - start_time
         # print(f"キャッシュヒット！保存済み回答を返します (応答時間: {elapsed_time:.3f}秒)")
 
@@ -31,10 +32,8 @@ def respond(message, chat_history):
         print("キャッシュヒットなし。LLMで新規回答を生成します")
 
         prompt = f"""
-        1. 専門知識に基づき、質問に関連する情報を要約して回答してください。        
-        2. 回答は日本語で作成し、結論と臨床的な参考事例を含めてください。
-        3. 直接関連する情報がない場合は、最も近い情報を提供し、その旨を明示してください。
-        4. 歯科医療に関する質問（歯牙移植、歯科治療、歯科技工所など）は非常に専門的であるため、必ずベクトル検索ツールを使用してください。自身の知識だけで回答せず、必ずツールを使用してください。
+        1. 回答は日本語で行い、結論、理由、リスク、臨床的な参考事例を必ず含めてください。       
+        2. 歯科医療の質問は専門性が高いため、必ずベクトル検索ツールを使用し、その結果のみを参考にして回答を作成してください。自身の知識だけで回答せず、必ずツールを使用してください。
 
         質問: {message}
         """
@@ -50,18 +49,22 @@ def respond(message, chat_history):
     # 5. チャット履歴を更新
     chat_history.append((message, bot_message))
 
-    # 6. チャット履歴の最大保持数を制限
     MAX_HISTORY_LENGTH = 3
-    if len(chat_history) > MAX_HISTORY_LENGTH:
-        while len(chat_history) > MAX_HISTORY_LENGTH:
-            chat_history.pop(0)
+    chat_history = chat_history[-MAX_HISTORY_LENGTH:]
+    history.messages = history.messages[-MAX_HISTORY_LENGTH * 2:]
+
+
+    # 6. チャット履歴の最大保持数を制限
+    # MAX_HISTORY_LENGTH = 3
+    # if len(chat_history) > MAX_HISTORY_LENGTH:
+    #     while len(chat_history) > MAX_HISTORY_LENGTH:
+    #         chat_history.pop(0)
 
         # history.messagesも同様に制限
-        while len(history.messages) > MAX_HISTORY_LENGTH * 2:
-            history.messages.pop(0)
+        # while len(history.messages) > MAX_HISTORY_LENGTH * 2:
+        #     history.messages.pop(0)
 
     return "", chat_history
-
 
 # with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; border: 2px solid #2c3e50; }") as demo:
 with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as demo:    
@@ -83,5 +86,6 @@ if __name__ == "__main__":
 
 # if __name__ == "__main__":
 #     index = get_index()
+#     setup_cache_cleanup_scheduler(index,expiration_days=90)
 #     demo.launch(server_name="127.0.0.1", server_port=7860)
     
