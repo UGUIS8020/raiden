@@ -124,8 +124,8 @@ def store_response_in_pinecone(question, answer, index_name=CACHE_INDEX_NAME):
             if not indexes or index_name not in [idx.name for idx in indexes]:
                 print(f"インデックス {index_name} が存在しません。作成してください。")
                 # 代替としてraidenインデックスを使用
-                print(f"代替として 'raiden' インデックスを使用します")
-                index_name = "raiden"
+                print(f"代替として 'raiden-main' インデックスを使用します")
+                index_name = "raiden-main"
                 try:
                     pinecone_index = pc.Index(index_name)
                 except Exception as e:
