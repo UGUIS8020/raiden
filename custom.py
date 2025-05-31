@@ -53,7 +53,7 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
         sorted_docs = sorted(weighted_docs, key=lambda x: x[1], reverse=True)
 
         # 上位5件のドキュメントを使用
-        top_docs = [doc for doc, _ in sorted_docs[:6]]
+        top_docs = [doc for doc, _ in sorted_docs[:8]]
 
         print("--- 重み付け後のドキュメント ---")
         for i, doc in enumerate(top_docs):
