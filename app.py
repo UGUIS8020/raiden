@@ -18,8 +18,8 @@ def respond(message, chat_history):
         history.add_ai_message(ai_message)
 
       # 1. キャッシュ検索（過去回答の検索）
-    # cached_result = search_cached_answer(message)
-    cached_result = {"found": False}
+    cached_result = search_cached_answer(message)
+    # cached_result = {"found": False}
 
     if cached_result.get("found"):        
         bot_message = cached_result["answer"]
@@ -80,12 +80,12 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     clear = gr.ClearButton([msg, chatbot])
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
-# if __name__ == "__main__":
-#     index = get_index()
-#     demo.launch(server_name="0.0.0.0", server_port=7860)
-
 if __name__ == "__main__":
     index = get_index()
-    setup_cache_cleanup_scheduler(index,expiration_days=90)
-    demo.launch(server_name="127.0.0.1", server_port=7860)
+    demo.launch(server_name="0.0.0.0", server_port=7860)
+
+# if __name__ == "__main__":
+#     index = get_index()
+#     setup_cache_cleanup_scheduler(index,expiration_days=90)
+#     demo.launch(server_name="127.0.0.1", server_port=7860)
     
