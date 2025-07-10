@@ -1,4 +1,4 @@
-gradio==4.44.0
+gradio==5.20.1
 langchain==0.2.3
 langchain-openai==0.1.8
 langchain-community==0.2.4
@@ -6,3 +6,5 @@ unstructured==0.14.5
 chromadb==0.5.0
 nltk==3.8.1
 pinecone-client==5.0.1
+scikit-learn==1.4.2 
+apscheduler==3.11.0
