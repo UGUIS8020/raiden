@@ -86,7 +86,6 @@ if __name__ == "__main__":
         server_name="127.0.0.1",     # 外部にはバインドしない
         server_port=7860,
         share=False,                 # Gradioの外部トンネル機能を無効化
-        enable_queue=True,
         inbrowser=False              # 自動でブラウザを開かない（サーバー用途）
     )
 
