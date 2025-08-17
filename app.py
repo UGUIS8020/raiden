@@ -18,8 +18,8 @@ def respond(message, chat_history):
         history.add_ai_message(ai_message)
 
       # 1. キャッシュ検索（過去回答の検索）
-    cached_result = search_cached_answer(message)
-    # cached_result = {"found": False}
+    # cached_result = search_cached_answer(message)
+    cached_result = {"found": False}
 
     if cached_result.get("found"):        
         bot_message = cached_result["answer"]
@@ -34,6 +34,15 @@ def respond(message, chat_history):
         prompt = f"""
         1. 回答は日本語で行い、結論、理由、リスク、臨床的な参考事例を必ず含めてください。       
         2. 歯科医療の質問は専門性が高いため、必ずベクトル検索ツールを使用し、その結果のみを参考にして回答を作成してください。自身の知識だけで回答せず、必ずツールを使用してください。
+        3.検索結果の1位文書から重要な情報を見逃していないか特に注意して確認してください。     
+
+        ## 複合質問の処理手順
+        質問に複数の要素が含まれる場合：
+
+        **STEP 1: 質問の分解**
+        - 質問を個別要素に分解してください
+        - 例: "AとBについて教えて" → ["Aについて", "Bについて"]   
+        複数の質問に応答してください
 
         質問: {message}
         """
@@ -42,9 +51,9 @@ def respond(message, chat_history):
         bot_message = chat(prompt, history, index)
 
         # 4. 回答をPineconeに保存
-        store_result = store_response_in_pinecone(message, bot_message)
-        if store_result:
-            print("新規回答を正常にPineconeに保存しました")
+        # store_result = store_response_in_pinecone(message, bot_message)
+        # if store_result:
+        #     print("新規回答を正常にPineconeに保存しました")
 
     # 5. チャット履歴を更新
     chat_history.append((message, bot_message))
