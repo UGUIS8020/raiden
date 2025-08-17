@@ -80,21 +80,21 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     clear = gr.ClearButton([msg, chatbot])
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
-# if __name__ == "__main__":
-#     index = get_index()
-#     demo.launch(
-#         server_name="127.0.0.1",     # 外部にはバインドしない
-#         server_port=7860,
-#         share=False,                 # Gradioの外部トンネル機能を無効化
-#         inbrowser=False              # 自動でブラウザを開かない（サーバー用途）
-#     )
-
 if __name__ == "__main__":
     index = get_index()
     demo.launch(
-        server_name="0.0.0.0",    
+        server_name="127.0.0.1",     # 外部にはバインドしない
         server_port=7860,
         share=False,                 # Gradioの外部トンネル機能を無効化
         inbrowser=False              # 自動でブラウザを開かない（サーバー用途）
     )
+
+# if __name__ == "__main__":
+#     index = get_index()
+#     demo.launch(
+#         server_name="0.0.0.0",    
+#         server_port=7860,
+#         share=False,                 # Gradioの外部トンネル機能を無効化
+#         inbrowser=False              # 自動でブラウザを開かない（サーバー用途）
+#     )
 
