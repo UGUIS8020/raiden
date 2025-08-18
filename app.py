@@ -18,8 +18,8 @@ def respond(message, chat_history):
         history.add_ai_message(ai_message)
 
       # 1. キャッシュ検索（過去回答の検索）
-    # cached_result = search_cached_answer(message)
-    cached_result = {"found": False}
+    cached_result = search_cached_answer(message)
+    # cached_result = {"found": False}
 
     if cached_result.get("found"):        
         bot_message = cached_result["answer"]
@@ -77,9 +77,9 @@ def respond(message, chat_history):
         bot_message = chat(prompt, history, index)
 
         # 4. 回答をPineconeに保存
-        # store_result = store_response_in_pinecone(message, bot_message)
-        # if store_result:
-        #     print("新規回答を正常にPineconeに保存しました")
+        store_result = store_response_in_pinecone(message, bot_message)
+        if store_result:
+            print("新規回答を正常にPineconeに保存しました")
 
     # 5. チャット履歴を更新
     chat_history.append((message, bot_message))
@@ -115,21 +115,21 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     clear = gr.ClearButton([msg, chatbot])
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
-if __name__ == "__main__":
-    index = get_index()
-    demo.launch(
-        server_name="127.0.0.1",     # 外部にはバインドしない
-        server_port=7860,
-        share=False,                 # Gradioの外部トンネル機能を無効化
-        inbrowser=False              # 自動でブラウザを開かない（サーバー用途）
-    )
-
 # if __name__ == "__main__":
 #     index = get_index()
 #     demo.launch(
-#         server_name="0.0.0.0",    
+#         server_name="127.0.0.1",     # 外部にはバインドしない
 #         server_port=7860,
 #         share=False,                 # Gradioの外部トンネル機能を無効化
 #         inbrowser=False              # 自動でブラウザを開かない（サーバー用途）
 #     )
+
+if __name__ == "__main__":
+    index = get_index()
+    demo.launch(
+        server_name="0.0.0.0",    
+        server_port=7860,
+        share=False,                 # Gradioの外部トンネル機能を無効化
+        inbrowser=False              # 自動でブラウザを開かない（サーバー用途）
+    )
 
