@@ -101,6 +101,7 @@ def respond(message, chat_history):
 
     return "", chat_history
 
+
 # with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; border: 2px solid #2c3e50; }") as demo:
 with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as demo:    
     # gr.Markdown("## 自家歯牙移植、歯牙再植に専門的に応答します")
