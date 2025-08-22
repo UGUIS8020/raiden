@@ -97,7 +97,7 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     gr.Markdown("## RAIDEN v2.0")  # バージョン番号を更新
     gr.Markdown("""
     ### Chatbotに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com
-    ### 🆕 API機能: http://127.0.0.1:5001/api/question でも利用可能    
+     
     """)    
 
     chatbot = gr.Chatbot(autoscroll=True)
@@ -121,7 +121,7 @@ if __name__ == "__main__":
         api.index = index
         
         # APIサーバーをバックグラウンドで起動
-        api_started = start_api_background(host='127.0.0.1', port=5001)
+        api_started = start_api_background(host='0.0.0.0', port=5001)
         
         if api_started:
             print("🎉 Gradio UI + API Server both running!")
