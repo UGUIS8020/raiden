@@ -88,19 +88,7 @@ def respond(message, chat_history):
     chat_history = chat_history[-MAX_HISTORY_LENGTH:]
     history.messages = history.messages[-MAX_HISTORY_LENGTH * 2:]
 
-
-    # 6. チャット履歴の最大保持数を制限
-    # MAX_HISTORY_LENGTH = 3
-    # if len(chat_history) > MAX_HISTORY_LENGTH:
-    #     while len(chat_history) > MAX_HISTORY_LENGTH:
-    #         chat_history.pop(0)
-
-        # history.messagesも同様に制限
-        # while len(history.messages) > MAX_HISTORY_LENGTH * 2:
-        #     history.messages.pop(0)
-
     return "", chat_history
-
 
 # with gr.Blocks(css=".custom-textbox { width: 100%; height: 100px; border: 2px solid #2c3e50; }") as demo:
 with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as demo:    
@@ -108,7 +96,8 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     # 連絡先情報を追加
     gr.Markdown("## RAIDEN v2.0")  # バージョン番号を更新
     gr.Markdown("""
-    ### Chatbotに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com    
+    ### Chatbotに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com
+    ### 🆕 API機能: http://127.0.0.1:5001/api/question でも利用可能    
     """)    
 
     chatbot = gr.Chatbot(autoscroll=True)
@@ -117,20 +106,43 @@ with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as
     msg.submit(respond, [msg, chatbot], [msg, chatbot])
 
 if __name__ == "__main__":
+    # RAGインデックスを初期化
+    print("🔄 Initializing RAG index...")
     index = get_index()
+    print("✅ RAG index initialized")
+    
+    # ========== API機能を起動（オプション） ==========
+    try:
+        print("🔧 Starting API server...")
+        from api import start_api_background
+        
+        # APIモジュールにindexを渡す
+        import api
+        api.index = index
+        
+        # APIサーバーをバックグラウンドで起動
+        api_started = start_api_background(host='127.0.0.1', port=5001)
+        
+        if api_started:
+            print("🎉 Gradio UI + API Server both running!")
+            print("💬 Gradio UI: http://127.0.0.1:7860")
+            print("🔗 API: http://127.0.0.1:5001/api/question")
+        else:
+            print("⚠️ API Server startup failed, continuing with Gradio only...")
+            
+    except ImportError:
+        print("📝 api.py not found - running Gradio only...")
+        print("💡 To enable API: create api.py and install 'flask flask-cors'")
+    except Exception as e:
+        print(f"⚠️ API startup error: {str(e)}")
+        print("📝 Continuing with Gradio only...")
+    
+    # ========== Gradioインターフェースの起動 ==========
+    print("🚀 Starting Gradio interface...")
     demo.launch(
-        server_name="127.0.0.1",     # 外部にはバインドしない
+        # server_name="127.0.0.1",     # 外部にはバインドしない
+        server_name="0.0.0.0",
         server_port=7860,
         share=False,                 # Gradioの外部トンネル機能を無効化
         inbrowser=False              # 自動でブラウザを開かない（サーバー用途）
     )
-
-# if __name__ == "__main__":
-#     index = get_index()
-#     demo.launch(
-#         server_name="0.0.0.0",    
-#         server_port=7860,
-#         share=False,                 # Gradioの外部トンネル機能を無効化
-#         inbrowser=False              # 自動でブラウザを開かない（サーバー用途）
-#     )
-

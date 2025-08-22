@@ -1,6 +1,11 @@
 """
 RAIDEN API Server
-既存のチャットボットに追加するAPI機能
+既存のapp.pyに追加するAPI機能
+
+使用方法:
+1. app.pyと同じディレクトリにこのファイルを配置
+2. pip install flask flask-cors
+3. python api.py で単独起動、またはapp.pyから自動起動
 """
 
 from flask import Flask, request, jsonify

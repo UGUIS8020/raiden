@@ -8,3 +8,4 @@ nltk==3.8.1
 pinecone-client==5.0.1
 scikit-learn==1.4.2 
 apscheduler==3.11.0
+flask-cors==6.0.1
