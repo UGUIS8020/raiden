@@ -2,7 +2,7 @@ import gradio as gr
 from chatbot_engine import chat, get_index
 from dotenv import load_dotenv
 from langchain_community.chat_message_histories import ChatMessageHistory
-from chatbot_utils import store_response_in_pinecone, search_cached_answer
+from chatbot_utils import store_response_in_qdrant, search_cached_answer
 from cache_manager import setup_cache_cleanup_scheduler
 import time
 
@@ -17,15 +17,15 @@ def respond(message, chat_history):
         history.add_user_message(user_message)
         history.add_ai_message(ai_message)
 
-      # 1. キャッシュ検索（過去回答の検索）
-    # cached_result = search_cached_answer(message)
-    cached_result = {"found": False}
+    # 1. キャッシュ検索（過去回答の検索）
+    cached_result = search_cached_answer(message)
+    # cached_result = {"found": False}
 
     if cached_result.get("found"):        
         bot_message = cached_result["answer"]
         # 応答時間を計測して表示
         elapsed_time = time.time() - start_time
-        # print(f"キャッシュヒット！保存済み回答を返します (応答時間: {elapsed_time:.3f}秒)")
+        print(f"キャッシュヒット！保存済み回答を返します (応答時間: {elapsed_time:.3f}秒)")
 
     else:
         # 3. キャッシュヒットしなかった場合 → 新規回答を生成
@@ -76,10 +76,10 @@ def respond(message, chat_history):
         # LLMから回答を取得
         bot_message = chat(prompt, history, index)
 
-        # 4. 回答をPineconeに保存
-        # store_result = store_response_in_pinecone(message, bot_message)
-        # if store_result:
-        #     print("新規回答を正常にPineconeに保存しました")
+        # 4. 回答をQdrantに保存
+        store_result = store_response_in_qdrant(message, bot_message)
+        if store_result:
+            print("新規回答を正常にQdrantに保存しました")
 
     # 5. チャット履歴を更新
     chat_history.append((message, bot_message))
@@ -94,7 +94,7 @@ def respond(message, chat_history):
 with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as demo:    
     # gr.Markdown("## 自家歯牙移植、歯牙再植に専門的に応答します")
     # 連絡先情報を追加
-    gr.Markdown("## RAIDEN v2.0")  # バージョン番号を更新
+    gr.Markdown("## RAIDEN v2.0 (Qdrant版)")  # バージョン番号を更新
     gr.Markdown("""
     ### Chatbotに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com
      
@@ -110,6 +110,11 @@ if __name__ == "__main__":
     print("🔄 Initializing RAG index...")
     index = get_index()
     print("✅ RAG index initialized")
+    
+    # キャッシュクリーンアップスケジューラーを起動
+    print("🧹 Starting cache cleanup scheduler...")
+    setup_cache_cleanup_scheduler()
+    print("✅ Cache cleanup scheduler started")
     
     # ========== API機能を起動（オプション） ==========
     try:

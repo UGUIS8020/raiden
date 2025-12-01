@@ -4,7 +4,7 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain.indexes.vectorstore import VectorStoreIndexWrapper
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_community.vectorstores.pinecone import Pinecone as PineconeVectorStore
+from langchain_community.vectorstores import Qdrant
 from dotenv import load_dotenv
 import os
 from langchain.agents.agent_toolkits import VectorStoreToolkit, VectorStoreInfo
@@ -14,7 +14,7 @@ from langchain.tools import BaseTool
 from langchain.memory import ConversationBufferMemory
 from langchain.agents import initialize_agent
 from langchain.agents import AgentType
-from pinecone import Pinecone
+from qdrant_client import QdrantClient
 import time
 
 from custom import CustomVectorStoreQATool
@@ -29,31 +29,38 @@ load_dotenv()
 # langsmithを使うためのコード
 openai_api_key = os.getenv('OPENAI_API_KEY')
 LANGCHAIN_API_KEY = os.getenv('LANGCHAIN_API_KEY')
-PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
+QDRANT_URL = os.getenv('QDRANT_URL')
+QDRANT_API_KEY = os.getenv('QDRANT_API_KEY')
 
 os.environ['LANGCHAIN_TRACING_V2'] = "true"
 os.environ['LANGCHAIN_ENDPOINT'] = "https://api.smith.langchain.com"
 os.environ['LANGCHAIN_PROJECT'] = "LangSmith-test"
 
-# Pinecone初期化
-pc = Pinecone(api_key=PINECONE_API_KEY)
-index_name = "raiden-main"
+# Qdrant初期化
+collection_name = "raiden-main"
 
 # グローバル変数の最適化
-llm = ChatOpenAI(model_name="gpt-4o", temperature=0,)
+llm = ChatOpenAI(model_name="gpt-4o", temperature=1,)
 tools = None
 
 def create_index() -> VectorStoreIndexWrapper:    
-    index = pc.Index(index_name)
+    # Qdrantクライアントの初期化
+    client = QdrantClient(
+        url=QDRANT_URL,
+        api_key=QDRANT_API_KEY,
+    )
+    
     embedding = OpenAIEmbeddings(model="text-embedding-3-small")
     
-    stats = index.describe_index_stats()
-    print(f"Total vectors in index: {stats.total_vector_count}")    
+    # コレクションの情報を取得
+    collection_info = client.get_collection(collection_name=collection_name)
+    print(f"Total vectors in collection: {collection_info.points_count}")    
     
-    vectorstore = PineconeVectorStore.from_existing_index(
-        index_name=index_name,
-        embedding=embedding,
-        text_key="text"
+    # Qdrant VectorStoreの作成
+    vectorstore = Qdrant(
+        client=client,
+        collection_name=collection_name,
+        embeddings=embedding,
     )
 
     return VectorStoreIndexWrapper(vectorstore=vectorstore)
@@ -68,15 +75,13 @@ def get_index() -> VectorStoreIndexWrapper:
         _index = create_index()
     return _index
 
-def create_tools(index: VectorStoreIndexWrapper, llm) ->List[BaseTool]:
+def create_tools(index: VectorStoreIndexWrapper, llm) -> List[BaseTool]:
     vectorstore_info = VectorStoreInfo(
         name="test_text_code",
         description="医療・歯科関連の専門知識を含むデータベースです。歯科に関係することは常に使用して回答してください。",
         vectorstore=index.vectorstore,
         search_kwargs={
-            "filter": None,
-            "fetch_k": 40,   
-            "lambda_mult": 0.6,  # 関連性と多様性のバランスを調整
+            "k": 15,  # 取得するドキュメント数
             "score_threshold": 0.6  # 類似度スコアの閾値         
         }
     )
@@ -103,11 +108,11 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
         if len(tools) == 0:
             print("Warning: No tools were created")
     
-    # ここでPinecone検索の挙動を確認してみる！
+    # ここでQdrant検索の挙動を確認してみる！
     DEBUG = False
     
     if DEBUG:
-        print("\n========== Pinecone Vector Search (Logging) ==========")
+        print("\n========== Qdrant Vector Search (Logging) ==========")
         query_text = message
         results = index.vectorstore.similarity_search_with_score(
             query_text, 
@@ -118,8 +123,8 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
             print(f"\n--- Result {i+1} ---")
             print(f"Score: {score}")          
             
-            # ベクトルIDの取得方法を複数試す
-            print(f"VectorID: {doc.metadata.get('vector_id', 'N/A')}")        
+            # メタデータの表示
+            print(f"ID: {doc.metadata.get('id', 'N/A')}")        
             print(f"Content: {doc.page_content[:50]}")
             # メタデータから有用な情報を表示
             print(f"type: {doc.metadata.get('type', 'N/A')}")
@@ -161,5 +166,3 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
     except Exception as e:
         print(f"Error: {e}")
         return "申し訳ありません。もう一度質問してください。"
-    
-    
