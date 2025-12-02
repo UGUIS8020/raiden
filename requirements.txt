@@ -1,5 +1,6 @@
 gradio==5.20.1
-langchain==0.2.3
+langchain-core==0.2.43
+langsmith==0.1.147
 langchain-openai==0.1.8
 langchain-community==0.2.4
 unstructured==0.14.5
@@ -8,4 +9,7 @@ nltk==3.8.1
 pinecone-client==5.0.1
 scikit-learn==1.4.2 
 apscheduler==3.11.0
-qdrant_client==1.16.1
+
+# Qdrant まわり
+langchain-qdrant==0.1.4
+qdrant-client>=1.10.0,<2.0.0

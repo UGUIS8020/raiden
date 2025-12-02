@@ -1,10 +1,12 @@
 import langchain
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain.indexes.vectorstore import VectorStoreIndexWrapper
 
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_community.vectorstores import Qdrant
+# ここを変更
+# from langchain_community.vectorstores import Qdrant
+from langchain_qdrant import QdrantVectorStore
+
 from dotenv import load_dotenv
 import os
 from langchain.agents.agent_toolkits import VectorStoreToolkit, VectorStoreInfo
@@ -18,11 +20,11 @@ from qdrant_client import QdrantClient
 import time
 
 from custom import CustomVectorStoreQATool
-
-# chatbot_utilsからの関数インポート
 from chatbot_utils import check_previous_responses
 
 langchain.verbose = False
+
+_index = None
 
 load_dotenv()
 
@@ -56,17 +58,14 @@ def create_index() -> VectorStoreIndexWrapper:
     collection_info = client.get_collection(collection_name=collection_name)
     print(f"Total vectors in collection: {collection_info.points_count}")    
     
-    # Qdrant VectorStoreの作成
-    vectorstore = Qdrant(
+    # Qdrant VectorStoreの作成（ここを QdrantVectorStore に変更）
+    vectorstore = QdrantVectorStore(
         client=client,
         collection_name=collection_name,
-        embeddings=embedding,
+        embedding=embedding,   # ← ★ 引数名が `embedding` に変わるのがポイント
     )
 
     return VectorStoreIndexWrapper(vectorstore=vectorstore)
-
-# 直接 create_index() を呼び出さず、キャッシュを使うようにする
-_index = None
 
 def get_index() -> VectorStoreIndexWrapper:
     """`create_index()` を1回だけ実行するようにする"""
