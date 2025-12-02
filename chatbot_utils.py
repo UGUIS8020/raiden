@@ -10,6 +10,7 @@ import re
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from text_normalizer import basic_normalize_text
+import uuid
 
 # 環境変数のロード
 load_dotenv()
@@ -113,20 +114,6 @@ def enhance_with_ai(question, answer):
 def store_response_in_qdrant(question, answer, collection_name=CACHE_COLLECTION_NAME):
     """
     質問と回答のペアをQdrantに保存する関数。AIで拡張した情報も保存。
-    
-    Parameters:
-    -----------
-    question : str
-        ユーザーからの質問
-    answer : str
-        チャットボットの回答
-    collection_name : str
-        Qdrantのコレクション名（デフォルトは"raiden-cache"）
-    
-    Returns:
-    --------
-    bool
-        保存が成功したらTrue、失敗したらFalse
     """
     try:
         # Qdrantクライアントの初期化
@@ -139,11 +126,9 @@ def store_response_in_qdrant(question, answer, collection_name=CACHE_COLLECTION_
             print(f"現在のポイント数: {collection_info.points_count}")
         except Exception as e:
             print(f"コレクション {collection_name} が見つかりません: {e}")
-            # コレクションリストを表示
             collections = client.get_collections()
             print(f"利用可能なコレクション: {[c.name for c in collections.collections]}")
             
-            # 代替としてraiden-mainコレクションを使用
             print(f"代替として 'raiden-main' コレクションを使用します")
             collection_name = "raiden-main"
             try:
@@ -164,7 +149,7 @@ def store_response_in_qdrant(question, answer, collection_name=CACHE_COLLECTION_
         
         # 質問と回答を含むメタデータを準備
         payload = {
-            "text": answer,  # 検索用にtextフィールドに回答を保存
+            "text": answer,
             "question": question,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "type": "chatbot_response",
@@ -199,7 +184,7 @@ def store_response_in_qdrant(question, answer, collection_name=CACHE_COLLECTION_
             
             alt_points = []
             for i, alt_question in enumerate(alt_questions):
-                if alt_question and len(alt_question) > 5:  # 短すぎる類義語は除外
+                if alt_question and len(alt_question) > 5:
                     print(f"類義語 {i+1}: '{alt_question}'")
                     
                     # 類義語の埋め込みベクトルを取得
@@ -210,16 +195,18 @@ def store_response_in_qdrant(question, answer, collection_name=CACHE_COLLECTION_
                     similarity = cosine_similarity(original_embedding, alt_embedding_array)[0][0]
                     print(f"  元の質問との類似度: {similarity:.4f}")
                     
+                    # 類義語用の新しいUUIDを生成
+                    synonym_id = str(uuid.uuid4())  # ← 修正：新しいUUIDを生成
+                    
                     # 類義語をポイントリストに追加
-                    alt_id = f"{unique_id}-alt-{i}"
                     alt_points.append(
                         PointStruct(
-                            id=alt_id,
+                            id=synonym_id,  # ← 修正：alt_id → synonym_id
                             vector=alt_embedding,
-                            payload=payload  # 同じペイロードを使用
+                            payload=payload
                         )
                     )
-                    print(f"  類義語ベクトルを準備: {alt_id}")
+                    print(f"  類義語ベクトルを準備: {synonym_id}")  # ← 修正：alt_id → synonym_id
                 else:
                     print(f"類義語 {i+1}: '{alt_question}' - 短すぎるためスキップ")
             
