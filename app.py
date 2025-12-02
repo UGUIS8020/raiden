@@ -94,7 +94,7 @@ def respond(message, chat_history):
 with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as demo:    
     # gr.Markdown("## 自家歯牙移植、歯牙再植に専門的に応答します")
     # 連絡先情報を追加
-    gr.Markdown("## RAIDEN v2.0 (Qdrant版)")  # バージョン番号を更新
+    gr.Markdown("## RAIDEN v2.0 (Qdrant版20251202)")  # バージョン番号を更新
     gr.Markdown("""
     ### Chatbotに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com
      
