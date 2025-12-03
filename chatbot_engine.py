@@ -1,15 +1,13 @@
+import logging  # ← 追加！
 import langchain
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain.indexes.vectorstore import VectorStoreIndexWrapper
-
-# ここを変更
-# from langchain_community.vectorstores import Qdrant
 from langchain_qdrant import QdrantVectorStore
 
 from dotenv import load_dotenv
 import os
-from langchain.agents.agent_toolkits import VectorStoreToolkit, VectorStoreInfo
+from langchain.agents.agent_toolkits import VectorStoreInfo
 
 from typing import List
 from langchain.tools import BaseTool
@@ -18,22 +16,31 @@ from langchain.agents import initialize_agent
 from langchain.agents import AgentType
 from qdrant_client import QdrantClient
 import time
-
 from custom import CustomVectorStoreQATool
-from chatbot_utils import check_previous_responses
 
-langchain.verbose = False
+# ロギング設定
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-_index = None
+# ✨ ここを追加：OpenAI/httpのログを抑制
+logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+# 環境変数ロード
 load_dotenv()
 
-# langsmithを使うためのコード
+# 環境変数
 openai_api_key = os.getenv('OPENAI_API_KEY')
 LANGCHAIN_API_KEY = os.getenv('LANGCHAIN_API_KEY')
 QDRANT_URL = os.getenv('QDRANT_URL')
 QDRANT_API_KEY = os.getenv('QDRANT_API_KEY')
 
+# LangSmith設定
 os.environ['LANGCHAIN_TRACING_V2'] = "true"
 os.environ['LANGCHAIN_ENDPOINT'] = "https://api.smith.langchain.com"
 os.environ['LANGCHAIN_PROJECT'] = "LangSmith-test"
@@ -41,31 +48,41 @@ os.environ['LANGCHAIN_PROJECT'] = "LangSmith-test"
 # Qdrant初期化
 collection_name = "raiden-main"
 
-# グローバル変数の最適化
-llm = ChatOpenAI(model_name="gpt-4o", temperature=1,)
+# グローバル変数
+_index = None  # ← 追加！
 tools = None
+llm = ChatOpenAI(model_name="gpt-4o", temperature=1)
 
 def create_index() -> VectorStoreIndexWrapper:    
-    # Qdrantクライアントの初期化
-    client = QdrantClient(
-        url=QDRANT_URL,
-        api_key=QDRANT_API_KEY,
-    )
-    
-    embedding = OpenAIEmbeddings(model="text-embedding-3-small")
-    
-    # コレクションの情報を取得
-    collection_info = client.get_collection(collection_name=collection_name)
-    print(f"Total vectors in collection: {collection_info.points_count}")    
-    
-    # Qdrant VectorStoreの作成（ここを QdrantVectorStore に変更）
-    vectorstore = QdrantVectorStore(
-        client=client,
-        collection_name=collection_name,
-        embedding=embedding,   # ← ★ 引数名が `embedding` に変わるのがポイント
-    )
-
-    return VectorStoreIndexWrapper(vectorstore=vectorstore)
+    """Qdrantインデックスを作成"""
+    try:
+        logger.info("Qdrantインデックスを初期化中...")
+        
+        # Qdrantクライアントの初期化
+        client = QdrantClient(
+            url=QDRANT_URL,
+            api_key=QDRANT_API_KEY,
+        )
+        
+        embedding = OpenAIEmbeddings(model="text-embedding-3-small")
+        
+        # コレクションの情報を取得
+        collection_info = client.get_collection(collection_name=collection_name)
+        logger.info(f"Total vectors in collection: {collection_info.points_count}")
+        
+        # Qdrant VectorStoreの作成
+        vectorstore = QdrantVectorStore(
+            client=client,
+            collection_name=collection_name,
+            embedding=embedding,
+        )
+        
+        logger.info("✅ Qdrantインデックスの初期化完了")
+        return VectorStoreIndexWrapper(vectorstore=vectorstore)
+        
+    except Exception as e:
+        logger.error(f"❌ インデックス作成エラー: {e}", exc_info=True)
+        raise
 
 def get_index() -> VectorStoreIndexWrapper:
     """`create_index()` を1回だけ実行するようにする"""
@@ -75,93 +92,109 @@ def get_index() -> VectorStoreIndexWrapper:
     return _index
 
 def create_tools(index: VectorStoreIndexWrapper, llm) -> List[BaseTool]:
-    vectorstore_info = VectorStoreInfo(
-        name="test_text_code",
-        description="医療・歯科関連の専門知識を含むデータベースです。歯科に関係することは常に使用して回答してください。",
-        vectorstore=index.vectorstore,
-        search_kwargs={
-            "k": 15,  # 取得するドキュメント数
-            "score_threshold": 0.6  # 類似度スコアの閾値         
-        }
-    )
-    
-    # カスタムツールを使う
-    qa_tool = CustomVectorStoreQATool(
-        name=vectorstore_info.name,
-        description=vectorstore_info.description,
-        vectorstore=vectorstore_info.vectorstore,
-        llm=llm,       
-    )
-
-    return [qa_tool]
-
+    """ベクトルストアツールを作成"""
+    try:
+        vectorstore_info = VectorStoreInfo(
+            name="dental_knowledge_base",
+            description="自家歯牙移植・歯牙再植に関する専門的な医療知識を含むデータベース。歯科医療に関する質問には必ずこのツールを使用してください。",
+            vectorstore=index.vectorstore,
+            search_kwargs={
+                "k": 15,
+                "score_threshold": 0.6
+            }
+        )
+        
+        # カスタムツールを使う
+        qa_tool = CustomVectorStoreQATool(
+            name=vectorstore_info.name,
+            description=vectorstore_info.description,
+            vectorstore=vectorstore_info.vectorstore,
+            llm=llm,
+        )
+        
+        logger.info(f"✅ ツール作成完了: {vectorstore_info.name}")
+        return [qa_tool]
+        
+    except Exception as e:
+        logger.error(f"❌ ツール作成エラー: {e}", exc_info=True)
+        return []
 
 def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapper) -> str:
+    """チャットボットのメイン処理"""
     start_time = time.time()
     
-    global tools
-    if tools is None:
-        tool_start = time.time()
-        tools = create_tools(index, llm)
-        print(f"Tool initialization time: {time.time() - tool_start:.2f}s")
-        if len(tools) == 0:
-            print("Warning: No tools were created")
+    # 入力検証
+    if not message or not message.strip():
+        logger.warning("空のメッセージを受信")
+        return "メッセージを入力してください。"
     
-    # ここでQdrant検索の挙動を確認してみる！
-    DEBUG = False
-    
-    if DEBUG:
-        print("\n========== Qdrant Vector Search (Logging) ==========")
-        query_text = message
-        results = index.vectorstore.similarity_search_with_score(
-            query_text, 
-            k=15
-        )
-
-        for i, (doc, score) in enumerate(results):
-            print(f"\n--- Result {i+1} ---")
-            print(f"Score: {score}")          
-            
-            # メタデータの表示
-            print(f"ID: {doc.metadata.get('id', 'N/A')}")        
-            print(f"Content: {doc.page_content[:50]}")
-            # メタデータから有用な情報を表示
-            print(f"type: {doc.metadata.get('type', 'N/A')}")
-            print(f"Category: {doc.metadata.get('category', 'N/A')}")        
-
-        print("=====================================================\n")
-    
-    # 通常通りメモリをセットしてエージェント実行
-    memory_start = time.time()
-    memory = ConversationBufferMemory(
-        chat_memory=history,
-        memory_key="chat_history",
-        return_messages=True,
-        output_key="output"
-    )
-    print(f"Memory setup time: {time.time() - memory_start:.2f}s")
-
-    agent_start = time.time()
-    agent_chain = initialize_agent(
-        tools,
-        llm,
-        agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
-        memory=memory,
-        max_iterations=6,
-        early_stopping_method="generate",
-        verbose=True
-    )
-    print(f"Agent initialization time: {time.time() - agent_start:.2f}s")
-
     try:
+        global tools
+        if tools is None:
+            tool_start = time.time()
+            tools = create_tools(index, llm)
+            logger.info(f"Tool initialization time: {time.time() - tool_start:.2f}s")
+            if len(tools) == 0:
+                logger.warning("Warning: No tools were created")
+                return "システムエラーが発生しました。管理者に連絡してください。"
+        
+        # デバッグモード（必要に応じて）
+        DEBUG = False
+        
+        if DEBUG:
+            logger.debug("\n========== Qdrant Vector Search (Logging) ==========")
+            query_text = message
+            results = index.vectorstore.similarity_search_with_score(query_text, k=15)
+
+            for i, (doc, score) in enumerate(results):
+                logger.debug(f"\n--- Result {i+1} ---")
+                logger.debug(f"Score: {score}")
+                logger.debug(f"ID: {doc.metadata.get('id', 'N/A')}")
+                logger.debug(f"Content: {doc.page_content[:50]}")
+                logger.debug(f"type: {doc.metadata.get('type', 'N/A')}")
+                logger.debug(f"Category: {doc.metadata.get('category', 'N/A')}")
+
+            logger.debug("=====================================================\n")
+        
+        # メモリセットアップ
+        memory_start = time.time()
+        memory = ConversationBufferMemory(
+            chat_memory=history,
+            memory_key="chat_history",
+            return_messages=True,
+            output_key="output"
+        )
+        logger.debug(f"Memory setup time: {time.time() - memory_start:.2f}s")
+
+        # エージェント初期化
+        agent_start = time.time()
+        agent_chain = initialize_agent(
+            tools,
+            llm,
+            agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+            memory=memory,
+            max_iterations=6,
+            early_stopping_method="generate",
+            verbose=True,
+            handle_parsing_errors=True,
+        )
+        logger.debug(f"Agent initialization time: {time.time() - agent_start:.2f}s")
+
+        # 実行
         invoke_start = time.time()
         result = agent_chain.invoke(input=message)
-        print(f"Agent execution time: {time.time() - invoke_start:.2f}s")
-        print(f"Total processing time: {time.time() - start_time:.2f}s")
+        
+        elapsed_time = time.time() - start_time
+        logger.info(f"✅ 回答生成完了 (応答時間: {elapsed_time:.2f}秒)")
 
-        print(f"\n[Agent Output]: {result.get('output', 'No output')}")
-
-        return result['output']
+        output = result.get('output', '')
+        if output:
+            logger.debug(f"[Agent Output]: {output[:100]}...")  # 最初の100文字のみ
+            return output
+        else:
+            logger.warning("空の回答が生成されました")
+            return "申し訳ありません。回答を生成できませんでした。"
+            
     except Exception as e:
-        print(f"Error: {e}")
-        return "申し訳ありません。もう一度質問してください。"
+        logger.error(f"❌ チャット処理エラー: {e}", exc_info=True)
+        return "申し訳ありません。エラーが発生しました。もう一度お試しください。"
