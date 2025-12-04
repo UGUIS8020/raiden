@@ -55,9 +55,25 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
         
         # ★ デバッグ: 最初のドキュメントのメタデータを全て表示
         if len(docs_and_scores) > 0:
-            first_doc = docs_and_scores[0][0]
-            logger.info(f"🔍 メタデータの全キー: {list(first_doc.metadata.keys())}")
-            logger.info(f"🔍 メタデータの全内容: {first_doc.metadata}")
+            # 最初の3件のVector IDを取得
+            vector_ids = [self._get_vector_id(doc) for doc, _ in docs_and_scores[:3]]
+            logger.info(f"📋 取得した最初の3件のVector ID: {vector_ids}")
+            
+            # Qdrant Clientで直接確認
+            from qdrant_client import QdrantClient
+            import os
+            client = QdrantClient(
+                url=os.getenv('QDRANT_URL'),
+                api_key=os.getenv('QDRANT_API_KEY'),
+            )
+            
+            # 最初のドキュメントのpayloadを直接取得
+            point = client.retrieve(
+                collection_name="raiden-main",
+                ids=[vector_ids[0]],
+                with_payload=True
+            )
+            logger.info(f"✅ 直接取得したpayload: {point[0].payload}")
         
         logger.debug(f"📥 {len(docs_and_scores)}件のドキュメントを取得")
         logger.debug("--- 重み付け前のドキュメント（全100件） ---")

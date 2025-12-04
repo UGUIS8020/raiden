@@ -100,7 +100,15 @@ def create_tools(index: VectorStoreIndexWrapper, llm) -> List[BaseTool]:
             vectorstore=index.vectorstore,
             search_kwargs={
                 "k": 15,
-                "score_threshold": 0.6
+                "score_threshold": 0.6,
+                "filter": {  # ← これを追加
+                    "must": [
+                        {
+                            "key": "type",
+                            "match": {"value": "content"}
+                        }
+                    ]
+                }
             }
         )
         
