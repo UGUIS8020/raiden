@@ -32,15 +32,16 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
         )
         return template.format(name=name, description=description)
 
-    def _get_vector_id(self, doc: Document) -> str:
+    def _get_vector_id(self, doc: Document) -> Optional[str]:
         """ドキュメントからVector IDを取得（Qdrant対応）"""
         vector_id = (
-            doc.metadata.get('vector_id') or 
-            doc.metadata.get('id') or 
-            doc.metadata.get('_id') or
-            getattr(doc, 'id', None)
+            doc.metadata.get('vector_id')
+            or doc.metadata.get('id')
+            or doc.metadata.get('_id')
+            or getattr(doc, 'id', None)
         )
-        return str(vector_id) if vector_id else 'N/A'
+        # 見つからなければ None を返す
+        return str(vector_id) if vector_id is not None else None
 
     def _run(
         self,
@@ -49,86 +50,87 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
     ) -> str:
         """ツールの実行メソッド"""
         from langchain.chains.retrieval_qa.base import RetrievalQA
+        from qdrant_client import QdrantClient
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        import os
 
-        # ドキュメントを100件取得
-        docs_and_scores = self.vectorstore.similarity_search_with_score(query, k=100)
-        
-        # ★ デバッグ: 最初のドキュメントのメタデータを全て表示
-        if len(docs_and_scores) > 0:
-            # 最初の3件のVector IDを取得
-            vector_ids = [self._get_vector_id(doc) for doc, _ in docs_and_scores[:3]]
-            logger.info(f"📋 取得した最初の3件のVector ID: {vector_ids}")
-            
-            # Qdrant Clientで直接確認
-            from qdrant_client import QdrantClient
-            import os
-            client = QdrantClient(
-                url=os.getenv('QDRANT_URL'),
-                api_key=os.getenv('QDRANT_API_KEY'),
+        TOP_K = 15
+
+        # ★ いきなり上位15件だけ取得（type=content のみ）
+        docs_and_scores = self.vectorstore.similarity_search_with_score(
+            query, 
+            k=TOP_K,
+            filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="type",
+                        match=MatchValue(value="content")
+                    )
+                ]
             )
-            
-            # 最初のドキュメントのpayloadを直接取得
-            point = client.retrieve(
-                collection_name="raiden-main",
-                ids=[vector_ids[0]],
-                with_payload=True
-            )
-            logger.info(f"✅ 直接取得したpayload: {point[0].payload}")
-        
+        )
+
         logger.debug(f"📥 {len(docs_and_scores)}件のドキュメントを取得")
-        logger.debug("--- 重み付け前のドキュメント（全100件） ---")
-        for i, (doc, score) in enumerate(docs_and_scores):
-            vector_id = self._get_vector_id(doc)
-            weight = doc.metadata.get('weight', 1.0)
-            doc_type = doc.metadata.get('type', 'N/A')  # ← これが取得できていない
-            logger.debug(
-                f"Doc {i}: Score={score:.6f}, Weight={weight}, "
-                f"Type={doc_type}, VectorID={vector_id}"
-            )
 
-        # 重みによる再ランキング
-        weighted_docs = []
-        for doc, score in docs_and_scores:
-            weight = doc.metadata.get("weight", 1.0)
-            weighted_score = score * weight
+        # 類似文書がゼロのときの保険
+        if not docs_and_scores:
+            logger.warning("⚠ 類似ドキュメントが1件も見つかりませんでした")
+            return "関連する文書が見つかりませんでした。別の聞き方で質問してみてください。"
+
+        # similarity_search_with_score はすでにスコア順で返してくれる想定なので、
+        # 追加の sorted() は不要（保険で残したいならここで sorted してもよい）
+        top_docs_with_scores = docs_and_scores  # [(doc, score), ...] 最大15件
+
+        # ★ 上位15件だけpayloadを取得（高速化）
+        client = QdrantClient(
+            url=os.getenv('QDRANT_URL'),
+            api_key=os.getenv('QDRANT_API_KEY'),
+        )
+
+        raw_vector_ids = [self._get_vector_id(doc) for doc, _ in top_docs_with_scores]
+        vector_ids = [vid for vid in raw_vector_ids if vid is not None]
+
+        points = client.retrieve(
+            collection_name="raiden-main",
+            ids=vector_ids,
+            with_payload=True
+        )
+
+        payload_map = {str(point.id): point.payload for point in points}
+
+        top_docs = []
+        for doc, score in top_docs_with_scores:
+            vector_id = self._get_vector_id(doc)
+            if vector_id and vector_id in payload_map:
+                payload = payload_map[vector_id]
+                doc.metadata['type'] = payload.get('type', 'N/A')
+                doc.metadata['original_id'] = payload.get('original_id', 'N/A')
             doc.metadata["original_score"] = score
-            doc.metadata["weighted_score"] = weighted_score
-            weighted_docs.append((doc, weighted_score))
+            top_docs.append(doc)
 
-        # 重み付けされたスコアでソート（降順）
-        sorted_docs = sorted(weighted_docs, key=lambda x: x[1], reverse=True)
+        logger.info("🔄 検索完了")
 
-        # 上位15件のドキュメントを使用
-        top_docs = [doc for doc, _ in sorted_docs[:15]]
+        # ログ用（ID＋スコア）
+        lines = []
+        for i, doc in enumerate(top_docs, start=1):
+            original_id = doc.metadata.get("original_id", "N/A")
+            score = doc.metadata.get("original_score", None)
+            if isinstance(score, (int, float)):
+                lines.append(f"{i:2d}. {original_id} (score={score:.4f})")
+            else:
+                lines.append(f"{i:2d}. {original_id}")
 
-        # 重要な情報はINFOレベルで出力
-        logger.info("🔄 重み付け再ランキング完了")
-        logger.info(f"📊 上位3件のタイプ: {[doc.metadata.get('type', 'N/A') for doc in top_docs[:3]]}")
-        
-        # 詳細ログ
-        logger.debug("--- 重み付け後のドキュメント（上位15件） ---")
-        for i, doc in enumerate(top_docs):
-            vector_id = self._get_vector_id(doc)
-            weighted = doc.metadata.get('weighted_score', 'N/A')
-            original = doc.metadata.get('original_score', 'N/A')
-            weight = doc.metadata.get('weight', 1.0)
-            doc_type = doc.metadata.get('type', 'N/A')
-            logger.debug(
-                f"Doc {i}: Weighted={weighted:.6f}, Original={original:.6f}, "
-                f"Weight={weight}, Type={doc_type}, VectorID={vector_id}"
-            )
+        log_text = "📊 上位{}件:\n{}".format(len(lines), "\n".join(lines))
+        logger.info(log_text)
 
-        # カスタムリトリーバーに渡す
         retriever = StaticDocRetriever(top_docs)
 
-        # QA チェーン作成
         chain = RetrievalQA.from_chain_type(
             self.llm,
             retriever=retriever,
             verbose=False
         )
 
-        # 実行
         try:
             result = chain.invoke(
                 {chain.input_key: query},

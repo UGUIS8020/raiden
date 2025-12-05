@@ -21,7 +21,7 @@ from custom import CustomVectorStoreQATool
 # ロギング設定
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(filename)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
@@ -75,8 +75,8 @@ def create_index() -> VectorStoreIndexWrapper:
             client=client,
             collection_name=collection_name,
             embedding=embedding,
+            content_payload_key="text",  # ← 追加：payloadの"text"フィールドを使用
         )
-        
         logger.info("✅ Qdrantインデックスの初期化完了")
         return VectorStoreIndexWrapper(vectorstore=vectorstore)
         
