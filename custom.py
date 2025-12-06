@@ -33,14 +33,13 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
         return template.format(name=name, description=description)
 
     def _get_vector_id(self, doc: Document) -> Optional[str]:
-        """ドキュメントからVector IDを取得（Qdrant対応）"""
+        """ドキュメントから Qdrant の point.id を推定"""
         vector_id = (
-            doc.metadata.get('vector_id')
-            or doc.metadata.get('id')
+            doc.metadata.get('id')           # ← まず metadata['id']（UUID）を使う
             or doc.metadata.get('_id')
             or getattr(doc, 'id', None)
+            or doc.metadata.get('vector_id') # ← どうしても無ければ最後に vector_id
         )
-        # 見つからなければ None を返す
         return str(vector_id) if vector_id is not None else None
 
     def _run(
@@ -51,7 +50,7 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
         """ツールの実行メソッド"""
         from langchain.chains.retrieval_qa.base import RetrievalQA
         from qdrant_client import QdrantClient
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        from qdrant_client.models import Filter, FieldCondition, MatchAny
         import os
 
         TOP_K = 15
@@ -64,7 +63,7 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
                 must=[
                     FieldCondition(
                         key="type",
-                        match=MatchValue(value="content")
+                        match=MatchAny(any=["content", "pubmed_paper"])
                     )
                 ]
             )
@@ -102,9 +101,21 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
         for doc, score in top_docs_with_scores:
             vector_id = self._get_vector_id(doc)
             if vector_id and vector_id in payload_map:
-                payload = payload_map[vector_id]
-                doc.metadata['type'] = payload.get('type', 'N/A')
-                doc.metadata['original_id'] = payload.get('original_id', 'N/A')
+                payload = payload_map[vector_id] or {}
+
+                # ✅ payload → metadata にマージ（text は除外）
+                for key, value in payload.items():
+                    if key == "text":
+                        continue
+                    doc.metadata[key] = value
+
+                # original_id が無い古いデータ用のフォールバック
+                if "original_id" not in doc.metadata:
+                    doc.metadata["original_id"] = (
+                        doc.metadata.get("vector_id") or str(vector_id)
+                    )
+
+            # スコアは常に付与
             doc.metadata["original_score"] = score
             top_docs.append(doc)
 
@@ -113,12 +124,29 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
         # ログ用（ID＋スコア）
         lines = []
         for i, doc in enumerate(top_docs, start=1):
-            original_id = doc.metadata.get("original_id", "N/A")
-            score = doc.metadata.get("original_score", None)
+            meta = getattr(doc, "metadata", {}) or {}
+
+            vector_id  = meta.get("vector_id") or meta.get("original_id", "N/A")
+            section    = meta.get("section", "N/A")
+            lang       = meta.get("lang", "N/A")
+            title      = meta.get("title", "") or ""
+
+            score = meta.get("original_score", None)
+            if not isinstance(score, (int, float)) and hasattr(doc, "score"):
+                score = doc.score
+
             if isinstance(score, (int, float)):
-                lines.append(f"{i:2d}. {original_id} (score={score:.4f})")
+                lines.append(
+                    f"{i:2d}. {vector_id} "
+                    f"[section={section}, lang={lang}] "
+                    f"{title[:30]}... (score={score:.4f})"
+                )
             else:
-                lines.append(f"{i:2d}. {original_id}")
+                lines.append(
+                    f"{i:2d}. {vector_id} "
+                    f"[section={section}, lang={lang}] "
+                    f"{title[:30]}..."
+                )
 
         log_text = "📊 上位{}件:\n{}".format(len(lines), "\n".join(lines))
         logger.info(log_text)
