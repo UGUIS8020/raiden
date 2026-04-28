@@ -32,7 +32,7 @@ def respond(message, chat_history):
         # キャッシュ検索
         cached_result = {"found": False}
 
-        if cached_result.get("found"):        
+        if cached_result.get("found"):
             bot_message = cached_result["answer"]
             elapsed_time = time.time() - start_time
             print(f"✅ キャッシュヒット (応答時間: {elapsed_time:.2f}秒)")
@@ -40,7 +40,7 @@ def respond(message, chat_history):
             # 新規回答を生成
             prompt = SYSTEM_PROMPT_TEMPLATE.format(question=message)
             bot_message = chat(prompt, history, index)
-            
+
             elapsed_time = time.time() - start_time
             print(f"✅ 回答生成完了 (応答時間: {elapsed_time:.2f}秒)")
     

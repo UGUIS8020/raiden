@@ -96,7 +96,7 @@ def create_tools(index: VectorStoreIndexWrapper, llm) -> List[BaseTool]:
     try:
         vectorstore_info = VectorStoreInfo(
             name="dental_knowledge_base",
-            description="自家歯牙移植・歯牙再植に関する専門的な医療知識を含むデータベース。歯科医療に関する質問には必ずこのツールを使用してください。",
+            description="歯科医療・歯科医院の運営に関するあらゆる情報を含む専門データベース。自家歯牙移植・歯牙再植の臨床情報、診療報酬改定・点数・加算・施設基準、賃上げ・給与・人件費、保険請求、医院経営・運営、学術論文など幅広い情報を収録しています。ユーザーの質問に関連する情報が含まれている可能性があれば、積極的にこのツールを使用してください。",
             vectorstore=index.vectorstore,
             search_kwargs={
                 "k": 15,
@@ -185,6 +185,14 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
             early_stopping_method="generate",
             verbose=True,
             handle_parsing_errors=True,
+            agent_kwargs={
+                "system_message": (
+                    "あなたは専門知識データベースを持つアシスタントです。"
+                    "ユーザーの質問には、まず必ず dental_knowledge_base ツールで検索し、"
+                    "その結果に基づいて回答してください。"
+                    "ツールの検索結果がない場合のみ、一般的な知識で補足してください。"
+                )
+            },
         )
         logger.debug(f"Agent initialization time: {time.time() - agent_start:.2f}s")
 
