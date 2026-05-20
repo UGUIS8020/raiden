@@ -2,88 +2,66 @@ import gradio as gr
 from chatbot_engine import chat, get_index
 from dotenv import load_dotenv
 from langchain_community.chat_message_histories import ChatMessageHistory
-from chatbot_utils import store_response_in_pinecone, search_cached_answer
 from cache_manager import setup_cache_cleanup_scheduler
+from prompts import SYSTEM_PROMPT_TEMPLATE
+from chatbot_utils import search_cached_answer, store_response_in_qdrant
 import time
 
 load_dotenv()
 
+# キャッシュ機能の切り替え（True: 有効 / False: 無効）
+CACHE_ENABLED = True
+
+index = None
+
 def respond(message, chat_history):
-    start_time = time.time()    
+    global index
+    start_time = time.time()
+    
+    # 入力検証
+    if not message or not message.strip():
+        return "", chat_history
+    
+    if len(message) > 5000:
+        error_msg = "申し訳ありませんが、質問が長すぎます。5000文字以内でお願いします。"
+        return "", chat_history + [("", error_msg)]
+    
+    try:
+        # ChatMessageHistory オブジェクトに現在の履歴を追加
+        history = ChatMessageHistory()
+        for [user_message, ai_message] in chat_history:
+            history.add_user_message(user_message)
+            history.add_ai_message(ai_message)
 
-    # ChatMessageHistory オブジェクトに現在の履歴を追加
-    history = ChatMessageHistory()
-    for [user_message, ai_message] in chat_history:
-        history.add_user_message(user_message)
-        history.add_ai_message(ai_message)
+        # キャッシュ検索
+        cached_result = search_cached_answer(message) if CACHE_ENABLED else {"found": False}
 
-      # 1. キャッシュ検索（過去回答の検索）
-    cached_result = search_cached_answer(message)
-    # cached_result = {"found": False}
+        if cached_result.get("found"):
+            bot_message = cached_result["answer"]
+            elapsed_time = time.time() - start_time
+            print(f"✅ キャッシュヒット (応答時間: {elapsed_time:.2f}秒)")
+        else:
+            # 新規回答を生成
+            prompt = SYSTEM_PROMPT_TEMPLATE.format(question=message)
+            bot_message = chat(prompt, history, index)
 
-    if cached_result.get("found"):        
-        bot_message = cached_result["answer"]
-        # 応答時間を計測して表示
-        elapsed_time = time.time() - start_time
-        # print(f"キャッシュヒット！保存済み回答を返します (応答時間: {elapsed_time:.3f}秒)")
+            elapsed_time = time.time() - start_time
+            print(f"✅ 回答生成完了 (応答時間: {elapsed_time:.2f}秒)")
 
-    else:
-        # 3. キャッシュヒットしなかった場合 → 新規回答を生成
-        prompt = f"""
-        あなたは自家歯牙移植の専門知識を持つ歯科医師として回答してください。
+            # 新規回答をキャッシュに保存
+            if CACHE_ENABLED:
+                store_response_in_qdrant(message, bot_message)
+    
+    except Exception as e:
+        print(f"❌ エラー発生: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        bot_message = "申し訳ありません。エラーが発生しました。もう一度お試しください。"
 
-        ## 基本原則
-        1. 回答は日本語で行い、医学的正確性を最優先としてください
-        2. 必ずベクトル検索ツールを使用し、検索結果のみを参考に回答してください
-        3. 検索結果の上位文書から重要な情報（数値データ、症例、図表情報）を見逃さないよう特に注意してください
-        4. 文書に記載がない情報については「検索した文書には記載されていません」と明記してください
-
-        ## 回答構成（該当する要素を含めてください）
-        - **直接的な回答**: 質問に対する明確な答え
-        - **詳細な説明**: メカニズム、手順、基準など
-        - **根拠となるデータ**: 数値、期間、成功率、症例データなど
-        - **臨床的意義**: 実践的な応用や注意点
-        - **リスクや合併症**: 該当する場合
-        - **参考症例**: 具体的な事例がある場合
-
-        ## 情報の優先順位
-        【最優先】数値データ、図表付き症例、実験結果
-        【高優先】メカニズム、診断基準、治療方法、合併症
-        【標準】定義、分類、一般的説明
-
-        ## 複合質問の処理
-        質問に複数の要素が含まれる場合：
-        **STEP 1**: 質問を個別要素に分解
-        **STEP 2**: 各要素について上記の構成で回答
-        **STEP 3**: 要素間の関連性があれば説明
-
-        ## 専門用語への配慮
-        - 重要な専門用語には簡潔な説明を付加
-        - 略語の正式名称を併記
-        - 患者説明に使える表現も提供（適切な場合）
-
-        ## 専門性向上のための指示
-        - 検索結果に含まれる専門用語は積極的に使用
-        - メカニズムの詳細説明を重視
-        - 臨床的意義や病態との関連も含める
-        - 段階的なプロセスは番号付きで整理       
-
-        質問: {message}
-
-        上記の原則に従って、検索結果を最大限活用した包括的で実用的な回答を提供してください。
-        """
-
-        # LLMから回答を取得
-        bot_message = chat(prompt, history, index)
-
-        # 4. 回答をPineconeに保存
-        store_result = store_response_in_pinecone(message, bot_message)
-        if store_result:
-            print("新規回答を正常にPineconeに保存しました")
-
-    # 5. チャット履歴を更新
+    # チャット履歴を更新
     chat_history.append((message, bot_message))
-
+    
     MAX_HISTORY_LENGTH = 3
     chat_history = chat_history[-MAX_HISTORY_LENGTH:]
     history.messages = history.messages[-MAX_HISTORY_LENGTH * 2:]
@@ -94,7 +72,7 @@ def respond(message, chat_history):
 with gr.Blocks(css=".gradio-container {background-color:rgb(248, 230, 199)}") as demo:    
     # gr.Markdown("## 自家歯牙移植、歯牙再植に専門的に応答します")
     # 連絡先情報を追加
-    gr.Markdown("## RAIDEN v2.0")  # バージョン番号を更新
+    gr.Markdown("## RAIDEN v2.0 (Qdrant版20251205_2025)")  # バージョン番号を更新
     gr.Markdown("""
     ### Chatbotに関するご意見、ご要望は:070-6633-0363  **email**:shibuya8020@gmail.com
      
@@ -110,6 +88,11 @@ if __name__ == "__main__":
     print("🔄 Initializing RAG index...")
     index = get_index()
     print("✅ RAG index initialized")
+    
+    # キャッシュクリーンアップスケジューラーを起動
+    print("🧹 Starting cache cleanup scheduler...")
+    setup_cache_cleanup_scheduler()
+    print("✅ Cache cleanup scheduler started")
     
     # ========== API機能を起動（オプション） ==========
     try:
@@ -139,9 +122,10 @@ if __name__ == "__main__":
     
     # ========== Gradioインターフェースの起動 ==========
     print("🚀 Starting Gradio interface...")
+    demo.queue()
     demo.launch(
-        # server_name="127.0.0.1",     # 外部にはバインドしない
-        server_name="0.0.0.0",
+        server_name="127.0.0.1",     # 外部にはバインドしない
+        # server_name="0.0.0.0",
         server_port=7860,
         share=False,                 # Gradioの外部トンネル機能を無効化
         inbrowser=False              # 自動でブラウザを開かない（サーバー用途）
