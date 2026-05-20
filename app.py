@@ -4,9 +4,13 @@ from dotenv import load_dotenv
 from langchain_community.chat_message_histories import ChatMessageHistory
 from cache_manager import setup_cache_cleanup_scheduler
 from prompts import SYSTEM_PROMPT_TEMPLATE
+from chatbot_utils import search_cached_answer, store_response_in_qdrant
 import time
 
 load_dotenv()
+
+# キャッシュ機能の切り替え（True: 有効 / False: 無効）
+CACHE_ENABLED = True
 
 index = None
 
@@ -30,7 +34,7 @@ def respond(message, chat_history):
             history.add_ai_message(ai_message)
 
         # キャッシュ検索
-        cached_result = {"found": False}
+        cached_result = search_cached_answer(message) if CACHE_ENABLED else {"found": False}
 
         if cached_result.get("found"):
             bot_message = cached_result["answer"]
@@ -43,6 +47,10 @@ def respond(message, chat_history):
 
             elapsed_time = time.time() - start_time
             print(f"✅ 回答生成完了 (応答時間: {elapsed_time:.2f}秒)")
+
+            # 新規回答をキャッシュに保存
+            if CACHE_ENABLED:
+                store_response_in_qdrant(message, bot_message)
     
     except Exception as e:
         print(f"❌ エラー発生: {str(e)}")
@@ -114,6 +122,7 @@ if __name__ == "__main__":
     
     # ========== Gradioインターフェースの起動 ==========
     print("🚀 Starting Gradio interface...")
+    demo.queue()
     demo.launch(
         server_name="127.0.0.1",     # 外部にはバインドしない
         # server_name="0.0.0.0",

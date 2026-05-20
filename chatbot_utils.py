@@ -9,7 +9,6 @@ import json
 import re
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-from text_normalizer import basic_normalize_text
 import uuid
 
 # 環境変数のロード
