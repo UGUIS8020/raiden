@@ -35,6 +35,18 @@
 | 再起動 | `sudo systemctl restart raiden` |
 | 証明書の確認 | `sudo certbot certificates` |
 
+## Q&Aログと答え合わせ
+- すべての質問と回答は DynamoDB `raiden-qa-logs`（ap-northeast-1、PITR有効）に記録される（`qa_logger.py`）。
+  キーは `date`（JST の日付）と `sk`（日時#ID）。根拠にした資料（Qdrant の point_id・セクション名）も保存。
+  `QA_LOG_ENABLED=false` で記録を止められる。
+- 答え合わせはローカルPCで実行する（raiden フォルダで）:
+  ```
+  venv\Scripts\python eval\review_logs.py                 # 直近7日の未確認分を判定
+  venv\Scripts\python eval\review_logs.py --mark <date> "<sk>" ok|ng --note "メモ"
+  ```
+  レポートとテスト問題の候補は `C:\Users\Owner\Desktop\website\_raiden_qa_logs\reports\` に出力される
+  （患者の相談内容を含むため Git には入れない）。
+
 ## 注意
 - `.env` の `RAIDEN_API_KEY` は設定しないでください。hoero_world のページはブラウザから API キーなしで `/api/question` を呼んでいるため、設定すると 401 エラーで動かなくなります。
 - `.env` は git 管理外です。サーバー上の `/var/www/raiden/.env` を直接編集します。
