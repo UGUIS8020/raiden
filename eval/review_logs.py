@@ -36,9 +36,8 @@ import boto3  # noqa: E402
 from boto3.dynamodb.conditions import Attr, Key  # noqa: E402
 from openai import OpenAI  # noqa: E402
 
-from chatbot_engine import get_index  # noqa: E402
-from custom import expand_sections, section_text, source_label  # noqa: E402
-from eval_retrieval import search  # noqa: E402
+from chatbot_engine import get_index, llm  # noqa: E402
+from custom import retrieve_documents, section_text, source_label  # noqa: E402
 from qa_logger import JST, TABLE_NAME  # noqa: E402
 
 logging.disable(logging.CRITICAL)
@@ -53,9 +52,27 @@ JUDGE_SYSTEM = """あなたは歯科医療・歯科機器のQ&Aシステムの�
 質問、システムの回答、回答の根拠となる資料を読み、回答の品質を厳格に判定してください。
 資料に書かれていることだけを正しいとみなし、あなた自身の知識で補わないでください。
 
+資料は2種類ある:「回答時の資料」（システムが回答に使った資料）と「再検索した資料」（同じ質問で改めて検索した資料）。
+回答時の資料になく、再検索した資料にある答えを回答が示していなければ、検索の取りこぼしとして missing に含める。
+
+特に次の誤りを見逃さないこと:
+- 資料が一般的な機能（例: 角度の計測機能）しか説明していないのに、質問の具体的な用途（例: 咬合平面の角度）に「できる」と断定している → unsupported
+- 質問者が示した前提や候補（例: 「AはBでいいですか？」のB）に、資料の裏付けなく同意している → unsupported
+- 資料で別々の機能・選択肢として書かれているものを、1つの手順につなげている → contradictions
+- 資料にある機能の説明を取り違えている（例: 長さを測る方法を角度の測り方として説明）→ contradictions
+- 資料に答えがあるのに「記載なし」と答えている → no_answer_correct=false
+
+手順:
+1. 回答から具体的な主張（結論の文、手順の各ステップ、数値、できる/できない、機能の説明）を1つずつ取り出す。
+2. 各主張について、それを直接裏付ける資料の文をそのまま引用する（quote）。
+   - 主張の言い方が資料より強い・具体的な場合（例: 資料「角度を計測できる」→ 主張「咬合平面の角度を測定できる」）は、裏付けにならない。
+   - 引用できなければ status="unsupported"、資料と食い違えば status="contradicted"。
+3. その結果から判定項目を決める。
+
 判定項目:
-- unsupported: 回答の中で、資料から裏付けられない具体的な主張（手順・数値・機能・効果・できる/できない）。出典表記や一般的なつなぎの文は含めない。
-- contradictions: 資料と矛盾する主張。
+- claims: [{"claim": "回答の主張", "quote": "裏付ける資料の文（なければ null）", "status": "supported|unsupported|contradicted"}]
+- unsupported: status="unsupported" の主張（出典表記や一般的なつなぎの文は含めない）。
+- contradictions: status="contradicted" の主張。
 - missing: 質問に答えるうえで重要なのに回答から抜けている、資料にある情報（画面名・ボタン名・手順・条件・別の方法・別の資料の記載など）。
 - answered: 回答が質問に正面から答えているか。
 - no_answer_correct: 回答が「記載されていません」等と答えている場合のみ判定。資料に答えがなければ true、あるのに記載なしと答えていれば false。それ以外は null。
@@ -63,7 +80,7 @@ JUDGE_SYSTEM = """あなたは歯科医療・歯科機器のQ&Aシステムの�
 - test_case_points: この質問をテスト問題にする場合の「正解のポイント」（資料に基づく、2〜4個の短い箇条）。資料に答えがない質問なら ["資料に記載がないと答える", "一般論や推測で断定しない"]。
 
 出力JSON:
-{"verdict": "ok|needs_improvement|wrong", "unsupported": [], "contradictions": [], "missing": [],
+{"claims": [], "verdict": "ok|needs_improvement|wrong", "unsupported": [], "contradictions": [], "missing": [],
  "answered": true, "no_answer_correct": null, "comment": "一言", "test_case_points": []}"""
 
 
@@ -111,35 +128,36 @@ def reference_from_sources(vs, sources):
 
 
 def reference_by_search(vs, question):
-    """資料の記録がないログ用: 今のデータで検索し直す"""
-    docs = [d for d, _ in search(vs, question, ["content", "pubmed_paper"], 15)]
-    docs += [d for d, _ in search(vs, question, ["figure_description"], 5)]
-    docs = expand_sections(vs.client, vs.collection_name, docs)
+    """今のシステムと同じ方法（retrieve_documents）で検索し直す"""
+    docs = retrieve_documents(vs, llm, question)
     return [f"{source_label(d.metadata)}\n{d.page_content}" for d in docs]
 
 
-def judge(client, question, answer, refs):
-    ref = "\n\n---\n\n".join(refs)[:MAX_REF_CHARS] or "（資料なし）"
+def judge(client, question, answer, used_refs, searched_refs):
+    used = "\n\n---\n\n".join(used_refs)[:MAX_REF_CHARS // 2] or "（記録なし）"
+    searched = "\n\n---\n\n".join(searched_refs)[:MAX_REF_CHARS // 2] or "（なし）"
     resp = client.chat.completions.create(
         model="gpt-4o", temperature=0, response_format={"type": "json_object"},
         messages=[{"role": "system", "content": JUDGE_SYSTEM},
-                  {"role": "user", "content": f"質問:\n{question}\n\nシステムの回答:\n{answer}\n\n資料:\n{ref}"}],
+                  {"role": "user", "content": f"質問:\n{question}\n\nシステムの回答:\n{answer}\n\n"
+                                              f"=== 回答時の資料 ===\n{used}\n\n=== 再検索した資料 ===\n{searched}"}],
     )
     return json.loads(resp.choices[0].message.content)
 
 
 def review_item(vs, client, item):
     sources = item.get("sources") or []
-    if sources:
-        refs, ref_mode = reference_from_sources(vs, sources), "回答時の資料"
-    else:
-        refs, ref_mode = reference_by_search(vs, item["question"]), "現在のデータで再検索した資料"
+    used_refs = reference_from_sources(vs, sources) if sources else []
+    # 検索の取りこぼしも見つけられるよう、今のデータで検索し直した資料も渡す
+    searched_refs = [r for r in reference_by_search(vs, item["question"]) if r not in used_refs]
+    refs = used_refs + searched_refs
+    ref_mode = "回答時の資料＋再検索した資料" if sources else "再検索した資料のみ（回答時の資料の記録なし）"
     if item.get("error") or not item.get("answer"):
         result = {"verdict": "wrong", "unsupported": [], "contradictions": [], "missing": [],
                   "answered": False, "no_answer_correct": None,
                   "comment": f"エラーで回答できていない: {item.get('error', '')[:200]}", "test_case_points": []}
     else:
-        result = judge(client, item["question"], item["answer"], refs)
+        result = judge(client, item["question"], item["answer"], used_refs, searched_refs)
     result["reference_mode"] = ref_mode
     result["expect"] = sorted({s.get("base_name") for s in sources if s.get("base_name")})
     return item, result

@@ -68,6 +68,70 @@ def rewrite_queries(llm, query: str) -> List[str]:
     return [query] + extra[:2]
 
 
+TOP_K = 15
+FIGURE_K = 5  # 図の説明文は本文とは別枠で取得（件数が多く本文を押し出さないように）
+
+
+def doc_point_id(doc: Document) -> Optional[str]:
+    """ドキュメントから Qdrant の point.id を推定"""
+    vector_id = (
+        doc.metadata.get('id')            # まず metadata['id']（UUID）
+        or doc.metadata.get('_id')
+        or getattr(doc, 'id', None)
+        or doc.metadata.get('vector_id')  # どうしても無ければ vector_id
+    )
+    return str(vector_id) if vector_id is not None else None
+
+
+def fused_search(vectorstore, queries: List[str], types: List[str], k: int):
+    """複数の検索文で検索し、順位の融合（RRF）でまとめる。
+    類似度の値で並べると、元の質問の誘導的な語で上位に来た文書に、
+    言い換えた検索文で見つかった文書が押し出されるため（eval occ-07 で確認）"""
+    from qdrant_client.models import Filter, FieldCondition, MatchAny
+    fused, best = {}, {}
+    for q in queries:
+        results = vectorstore.similarity_search_with_score(
+            q, k=k, filter=Filter(must=[FieldCondition(key="type", match=MatchAny(any=types))]),
+        )
+        for rank, (doc, score) in enumerate(results, start=1):
+            key = doc_point_id(doc) or doc.page_content[:100]
+            fused[key] = fused.get(key, 0.0) + 1.0 / (60 + rank)
+            if key not in best or score > best[key][1]:
+                best[key] = (doc, score)
+    order = sorted(fused, key=fused.get, reverse=True)[:k]
+    return [best[key] for key in order]
+
+
+def retrieve_documents(vectorstore, llm, query: str) -> List[Document]:
+    """回答に渡す資料を取得する（検索文の追加 → 融合検索 → payload付与 → セクション展開）。
+    ツール（回答時）と eval/review_logs.py（答え合わせ時）で共通に使う"""
+    queries = rewrite_queries(llm, query)
+    logger.info(f"🔎 検索クエリ: {queries}")
+    docs_and_scores = (
+        fused_search(vectorstore, queries, ["content", "pubmed_paper"], TOP_K)
+        + fused_search(vectorstore, queries, ["figure_description"], FIGURE_K)
+    )
+    if not docs_and_scores:
+        return []
+
+    # 取得した文書だけ payload を取得し、metadata にマージ（text は除外）
+    client = vectorstore.client
+    ids = [pid for pid in (doc_point_id(d) for d, _ in docs_and_scores) if pid]
+    payload_map = {str(p.id): p.payload for p in client.retrieve(vectorstore.collection_name, ids=ids, with_payload=True)}
+    docs = []
+    for doc, score in docs_and_scores:
+        pid = doc_point_id(doc)
+        for key, value in (payload_map.get(pid) or {}).items():
+            if key != "text":
+                doc.metadata[key] = value
+        doc.metadata.setdefault("original_id", doc.metadata.get("vector_id") or pid)
+        doc.metadata["original_score"] = score
+        docs.append(doc)
+
+    # 小さいチャンクで見つけ、回答にはセクション全体を渡す（手順が途中で切れないように）
+    return expand_sections(client, vectorstore.collection_name, docs)
+
+
 MAX_SECTIONS = 6          # 回答に渡すセクション（展開後）の最大数
 _section_cache: dict = {}  # base_name -> セクション全文（データ更新時はアプリ再起動で反映）
 
@@ -155,14 +219,7 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
         return template.format(name=name, description=description)
 
     def _get_vector_id(self, doc: Document) -> Optional[str]:
-        """ドキュメントから Qdrant の point.id を推定"""
-        vector_id = (
-            doc.metadata.get('id')           # ← まず metadata['id']（UUID）を使う
-            or doc.metadata.get('_id')
-            or getattr(doc, 'id', None)
-            or doc.metadata.get('vector_id') # ← どうしても無ければ最後に vector_id
-        )
-        return str(vector_id) if vector_id is not None else None
+        return doc_point_id(doc)
 
     def _run(
         self,
@@ -171,87 +228,15 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
     ) -> str:
         """ツールの実行メソッド"""
         from langchain.chains.retrieval_qa.base import RetrievalQA
-        from qdrant_client.models import Filter, FieldCondition, MatchAny
 
-        TOP_K = 15
-        FIGURE_K = 5  # 図の説明文は本文とは別枠で取得（件数が多く本文を押し出さないように）
-
-        queries = rewrite_queries(self.llm, query)
-        logger.info(f"🔎 検索クエリ: {queries}")
-
-        def search(types, k):
-            # 複数の検索文で検索し、順位の融合（RRF）でまとめる。
-            # 類似度の値で並べると、元の質問の誘導的な語で上位に来た文書に、
-            # 言い換えた検索文で見つかった文書が押し出されるため（eval occ-07 で確認）
-            fused, best = {}, {}
-            for q in queries:
-                results = self.vectorstore.similarity_search_with_score(
-                    q, k=k, filter=Filter(must=[FieldCondition(key="type", match=MatchAny(any=types))]),
-                )
-                for rank, (doc, score) in enumerate(results, start=1):
-                    key = self._get_vector_id(doc) or doc.page_content[:100]
-                    fused[key] = fused.get(key, 0.0) + 1.0 / (60 + rank)
-                    if key not in best or score > best[key][1]:
-                        best[key] = (doc, score)
-            order = sorted(fused, key=fused.get, reverse=True)[:k]
-            return [best[key] for key in order]
-
-        # ★ 本文・論文の上位15件 + 図の説明文の上位5件
-        docs_and_scores = (
-            search(["content", "pubmed_paper"], TOP_K)
-            + search(["figure_description"], FIGURE_K)
-        )
-
-        logger.debug(f"📥 {len(docs_and_scores)}件のドキュメントを取得")
+        top_docs = retrieve_documents(self.vectorstore, self.llm, query)
 
         # 類似文書がゼロのときの保険
-        if not docs_and_scores:
+        if not top_docs:
             logger.warning("⚠ 類似ドキュメントが1件も見つかりませんでした")
             return "関連する文書が見つかりませんでした。別の聞き方で質問してみてください。"
-
-        top_docs_with_scores = docs_and_scores  # [(doc, score), ...] 本文最大15件 + 図最大5件
-
-        # ★ 取得した文書だけpayloadを取得（高速化）
-        # VectorStoreが保持しているクライアントを再利用（毎回の接続を避ける）
-        client = self.vectorstore.client
-
-        raw_vector_ids = [self._get_vector_id(doc) for doc, _ in top_docs_with_scores]
-        vector_ids = [vid for vid in raw_vector_ids if vid is not None]
-
-        points = client.retrieve(
-            collection_name=self.vectorstore.collection_name,
-            ids=vector_ids,
-            with_payload=True
-        )
-
-        payload_map = {str(point.id): point.payload for point in points}
-
-        top_docs = []
-        for doc, score in top_docs_with_scores:
-            vector_id = self._get_vector_id(doc)
-            if vector_id and vector_id in payload_map:
-                payload = payload_map[vector_id] or {}
-
-                # ✅ payload → metadata にマージ（text は除外）
-                for key, value in payload.items():
-                    if key == "text":
-                        continue
-                    doc.metadata[key] = value
-
-                # original_id が無い古いデータ用のフォールバック
-                if "original_id" not in doc.metadata:
-                    doc.metadata["original_id"] = (
-                        doc.metadata.get("vector_id") or str(vector_id)
-                    )
-
-            # スコアは常に付与
-            doc.metadata["original_score"] = score
-            top_docs.append(doc)
-
-        # 小さいチャンクで見つけ、回答にはセクション全体を渡す（手順が途中で切れないように）
-        top_docs = expand_sections(client, self.vectorstore.collection_name, top_docs)
         _last.sources = getattr(_last, "sources", []) + [{
-            "point_id": self._get_vector_id(d),
+            "point_id": doc_point_id(d),
             "vector_id": d.metadata.get("vector_id") or d.metadata.get("original_id"),
             "base_name": d.metadata.get("base_name"),
             "type": d.metadata.get("type"),
