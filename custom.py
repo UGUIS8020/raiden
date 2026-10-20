@@ -29,6 +29,22 @@ def source_label(meta: dict) -> str:
     return ""
 
 
+import threading
+
+# 直近の検索で回答に渡した資料（Q&Aログに記録するため。リクエストごとのスレッド単位で保持）
+_last = threading.local()
+
+
+def clear_last_sources():
+    _last.sources = []
+
+
+def pop_last_sources() -> list:
+    sources = getattr(_last, "sources", [])
+    _last.sources = []
+    return sources
+
+
 MAX_SECTIONS = 6          # 回答に渡すセクション（展開後）の最大数
 _section_cache: dict = {}  # base_name -> セクション全文（データ更新時はアプリ再起動で反映）
 
@@ -198,6 +214,13 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
 
         # 小さいチャンクで見つけ、回答にはセクション全体を渡す（手順が途中で切れないように）
         top_docs = expand_sections(client, self.vectorstore.collection_name, top_docs)
+        _last.sources = getattr(_last, "sources", []) + [{
+            "point_id": self._get_vector_id(d),
+            "vector_id": d.metadata.get("vector_id") or d.metadata.get("original_id"),
+            "base_name": d.metadata.get("base_name"),
+            "type": d.metadata.get("type"),
+            "score": d.metadata.get("original_score"),
+        } for d in top_docs]
         for doc in top_docs:
             label = source_label(doc.metadata)
             if label:

@@ -16,7 +16,7 @@ from langchain.agents import initialize_agent
 from langchain.agents import AgentType
 from qdrant_client import QdrantClient
 import time
-from custom import CustomVectorStoreQATool
+from custom import CustomVectorStoreQATool, clear_last_sources
 
 # ロギング設定
 logging.basicConfig(
@@ -122,7 +122,8 @@ def create_tools(index: VectorStoreIndexWrapper, llm) -> List[BaseTool]:
 def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapper) -> str:
     """チャットボットのメイン処理"""
     start_time = time.time()
-    
+    clear_last_sources()  # 前回の質問で使った資料の記録を消す（Q&Aログ用）
+
     # 入力検証
     if not message or not message.strip():
         logger.warning("空のメッセージを受信")

@@ -5,6 +5,8 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from cache_manager import setup_cache_cleanup_scheduler
 from prompts import SYSTEM_PROMPT_TEMPLATE
 from chatbot_utils import search_cached_answer, store_response_in_qdrant
+from custom import pop_last_sources
+from qa_logger import log_qa
 import os
 import time
 
@@ -27,6 +29,7 @@ def respond(message, chat_history):
         error_msg = "申し訳ありませんが、質問が長すぎます。5000文字以内でお願いします。"
         return "", chat_history + [("", error_msg)]
     
+    error = None
     try:
         # ChatMessageHistory オブジェクトに現在の履歴を追加
         history = ChatMessageHistory()
@@ -59,6 +62,11 @@ def respond(message, chat_history):
         traceback.print_exc()
         
         bot_message = "申し訳ありません。エラーが発生しました。もう一度お試しください。"
+        error = str(e)
+
+    # 答え合わせ用に記録（DynamoDB raiden-qa-logs）
+    log_qa(message, bot_message, channel="gradio", elapsed_sec=time.time() - start_time,
+           sources=pop_last_sources(), history_turns=len(chat_history), error=error)
 
     # チャット履歴を更新
     chat_history.append((message, bot_message))

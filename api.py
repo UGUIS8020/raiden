@@ -14,6 +14,8 @@ from chatbot_engine import chat, get_index
 from dotenv import load_dotenv
 from langchain_community.chat_message_histories import ChatMessageHistory
 from prompts import SYSTEM_PROMPT_TEMPLATE
+from custom import pop_last_sources
+from qa_logger import log_qa
 import hmac
 import time
 import threading
@@ -64,6 +66,7 @@ def api_question():
             "error_code": "UNAUTHORIZED"
         }), 401
 
+    question = None
     try:
         # リクエストデータの検証
         data = request.get_json(silent=True)
@@ -119,10 +122,12 @@ def api_question():
         
         # RAG検索 + LLM回答を実行
         answer = chat(prompt, history, index)
-        
+
         elapsed_time = time.time() - start_time
-        
+
         print(f"✅ Response generated in {elapsed_time:.3f}s")
+        log_qa(question, answer, channel="api", elapsed_sec=elapsed_time, sources=pop_last_sources(),
+               referer=request.headers.get("Referer") or request.headers.get("Origin"))
         
         return jsonify({
             "success": True,
@@ -139,7 +144,10 @@ def api_question():
         error_msg = str(e)
         
         print(f"❌ API Error after {elapsed_time:.3f}s: {error_msg}")
-        
+        if isinstance(question, str):
+            log_qa(question, "", channel="api", elapsed_sec=elapsed_time, sources=pop_last_sources(),
+                   referer=request.headers.get("Referer") or request.headers.get("Origin"), error=error_msg)
+
         return jsonify({
             "success": False,
             "error": "処理中にエラーが発生しました",

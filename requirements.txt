@@ -17,6 +17,9 @@ scikit-learn==1.4.2
 langchain-qdrant==0.1.4
 qdrant-client==1.16.1
 
+# Q&A logs (qa_logger.py -> DynamoDB raiden-qa-logs)
+boto3==1.38.37
+
 # API server (api.py)
 flask>=3.0,<4
 flask-cors>=4.0,<7
