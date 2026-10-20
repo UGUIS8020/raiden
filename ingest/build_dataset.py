@@ -422,6 +422,9 @@ def sanitize_line(s: str) -> str:
 
 
 def sanitize_body(body: str) -> str:
+    # LLMが改行を「\n」という文字のまま出力することがあるため改行に戻す
+    # （直前が英数字かつ直後が英字の場合は C:\new のようなパスの可能性があるので残す）
+    body = re.sub(r"(?<=[^\x00-\x7F])\\n|\\n(?![A-Za-z])", "\n", body)
     # 既存の登録スクリプトは行頭の [FigN] / [caseN] で本文を区切るため、本文中の該当行を無効化する
     lines = []
     for line in body.splitlines():

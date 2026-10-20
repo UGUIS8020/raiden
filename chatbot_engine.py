@@ -52,7 +52,7 @@ collection_name = "raiden-main"
 # グローバル変数
 _index = None  # ← 追加！
 tools = None
-llm = ChatOpenAI(model_name="gpt-4o", temperature=1)
+llm = ChatOpenAI(model_name="gpt-4o", temperature=0)  # 資料に忠実な回答にするため0（1だと言い換え・追加が増える）
 
 def create_index() -> VectorStoreIndexWrapper:    
     """Qdrantインデックスを作成"""
@@ -107,6 +107,9 @@ def create_tools(index: VectorStoreIndexWrapper, llm) -> List[BaseTool]:
             description=vectorstore_info.description,
             vectorstore=vectorstore_info.vectorstore,
             llm=llm,
+            # ツールの回答をそのまま最終回答にする。
+            # エージェントが書き直すと、資料ごとの手順や出典が落ちることがあったため（eval で確認）
+            return_direct=True,
         )
         
         logger.info(f"✅ ツール作成完了: {vectorstore_info.name}")
@@ -178,8 +181,12 @@ def chat(message: str, history: ChatMessageHistory, index: VectorStoreIndexWrapp
                 "system_message": (
                     "あなたは専門知識データベースを持つアシスタントです。"
                     "ユーザーの質問には、まず必ず dental_knowledge_base ツールで検索し、"
-                    "その結果に基づいて回答してください。"
-                    "ツールの検索結果がない場合のみ、一般的な知識で補足してください。"
+                    "その結果だけに基づいて回答してください。"
+                    "ツールには、会話の文脈を補ったうえで質問をそのまま（要約せずに）渡してください。"
+                    "ツールの結果に記載がない内容は一般的な知識で補わず、"
+                    "「検索した文書には記載されていません」と答えてください。"
+                    "ツールの結果に含まれる画面名・ボタン名・手順・数値・出典は省略せず最終回答に含め、"
+                    "ツールの結果にない情報を追加しないでください。"
                 )
             },
         )

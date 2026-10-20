@@ -5,3 +5,5 @@ venv
 ingest/output/
 ingest/.cache/
 # chroma_storage
+eval/results/
+

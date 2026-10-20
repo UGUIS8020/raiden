@@ -4,7 +4,7 @@ build_dataset.py で生成したデータを Qdrant（raiden-main）に登録す
 既存の登録スクリプトとの違い:
   - 本文をチャンクに分け、チャンクごとに1件として登録する
     （既存は長文のチャンクのベクトルを平均して1件にしていたため、検索でぼやけやすかった）
-  - 図の説明文はトピック名を付けて登録する（type="figure_description"）
+  - 図の説明文は本文チャンクにも含め、さらに単独でもトピック名を付けて登録する（type="figure_description"）
   - 同じ doc_id の既存データを削除してから登録するため、再登録しても古いチャンクが残らない
   - CLIP画像ベクトルは登録しない（テキストのベクトルと比較できないため）
 
@@ -31,8 +31,9 @@ load_dotenv(ROOT.parent / ".env")
 
 COLLECTION = "raiden-main"
 EMBEDDING_MODEL = "text-embedding-3-small"
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 150
+# 500字が、答えの一文を含むチャンクを上位に拾いやすかった（eval で 1000/700/500/350 を比較）
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 100
 WEIGHTS = {"content": 1.0, "figure_description": 0.7}
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -108,7 +109,11 @@ def build_records(doc_dir: Path, category: str) -> tuple[str, list[dict]]:
         header = f"title[{sec['title']}]\ntopic[{sec['topic']}]\n\n"
         fig_ids = list(sec["figures"].keys())
 
-        chunks = splitter.split_text(sec["body"]) if sec["body"] else []
+        # 図の説明も本文に含めてチャンク化する（本文が検索されれば図の情報も回答に届くように）
+        body = sec["body"]
+        if sec["figures"]:
+            body += "\n\n【図の説明】\n" + "\n".join(f"[{k}] {v}" for k, v in sec["figures"].items())
+        chunks = splitter.split_text(body) if body else []
         for i, chunk in enumerate(chunks):
             vid = f"{base}_content" if len(chunks) == 1 else f"{base}_content_{i + 1:02d}"
             records.append({
@@ -181,7 +186,7 @@ def main():
     qdrant = QdrantClient(url=os.getenv("QDRANT_URL"), api_key=os.getenv("QDRANT_API_KEY"))
     # Qdrant Cloud はフィルタに使う項目にインデックスが必要
     indexed = (qdrant.get_collection(COLLECTION).payload_schema or {}).keys()
-    for field in ("doc_id", "category"):
+    for field in ("doc_id", "category", "base_name"):  # base_name は custom.py のセクション展開で使用
         if field not in indexed:
             qdrant.create_payload_index(COLLECTION, field_name=field,
                                         field_schema=models.PayloadSchemaType.KEYWORD, wait=True)

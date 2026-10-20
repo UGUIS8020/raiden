@@ -4,9 +4,92 @@ from langchain_community.tools.vectorstore.tool import BaseVectorStoreTool
 from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain.schema import BaseRetriever
 from langchain_core.documents import Document
+from langchain_core.prompts import PromptTemplate
+from prompts import QA_PROMPT_TEMPLATE
 import logging
 
 logger = logging.getLogger(__name__)
+
+QA_PROMPT = PromptTemplate(template=QA_PROMPT_TEMPLATE, input_variables=["context", "question"])
+
+
+def source_label(meta: dict) -> str:
+    """回答で出典を示せるよう、文書の先頭に付ける出典表記"""
+    kind = "（図）" if meta.get("type") == "figure_description" else ""
+    if meta.get("source_file"):
+        pages = meta.get("pages") or []
+        page = ""
+        if len(pages) == 2:
+            page = f" p.{pages[0]}" if pages[0] == pages[1] else f" p.{pages[0]}-{pages[1]}"
+        return f"【出典: {meta['source_file']}{page}{kind}】"
+    if meta.get("pmid"):
+        return f"【出典: PubMed {meta['pmid']} {meta.get('title', '')}】"
+    if meta.get("title"):
+        return f"【出典: {meta['title']}{kind}】"
+    return ""
+
+
+MAX_SECTIONS = 6          # 回答に渡すセクション（展開後）の最大数
+_section_cache: dict = {}  # base_name -> セクション全文（データ更新時はアプリ再起動で反映）
+
+
+def _merge_chunks(chunks: List[str]) -> str:
+    """チャンク分割時の重なり（overlap）を取り除いてつなげる"""
+    merged = chunks[0]
+    for nxt in chunks[1:]:
+        overlap = next((k for k in range(min(len(merged), len(nxt), 200), 10, -1)
+                        if merged.endswith(nxt[:k])), 0)
+        merged += ("" if overlap else "\n") + nxt[overlap:]
+    return merged
+
+
+def section_text(client, collection: str, base_name: str) -> Optional[str]:
+    """同じセクション（base_name）の本文チャンクをすべて取得し、1つの文章に戻す"""
+    if base_name in _section_cache:
+        return _section_cache[base_name]
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+    points, _ = client.scroll(
+        collection_name=collection,
+        scroll_filter=Filter(must=[
+            FieldCondition(key="base_name", match=MatchValue(value=base_name)),
+            FieldCondition(key="type", match=MatchValue(value="content")),
+        ]),
+        limit=100, with_payload=["text", "chunk_index"], with_vectors=False,
+    )
+    if not points:
+        return None
+    points.sort(key=lambda p: p.payload.get("chunk_index", 0))
+    texts = [p.payload.get("text", "") for p in points]
+    header_end = texts[0].find("\n\n") + 2 if texts[0].startswith("title[") else 0
+    header = texts[0][:header_end]
+    bodies = [t[header_end:] if header and t.startswith(header) else t for t in texts]
+    text = header + _merge_chunks(bodies)
+    _section_cache[base_name] = text
+    return text
+
+
+def expand_sections(client, collection: str, docs: List[Document]) -> List[Document]:
+    """複数チャンクに分かれたセクションは、ヒットしたチャンクをセクション全体に置き換える"""
+    result, expanded = [], []
+    for doc in docs:
+        meta = doc.metadata
+        base = meta.get("base_name")
+        is_chunked = meta.get("type") == "content" and base and (meta.get("chunk_count") or 1) > 1
+        if is_chunked:
+            if base in expanded or len(expanded) >= MAX_SECTIONS:
+                continue  # 同じセクションの別チャンク、または上限超過
+            try:
+                full = section_text(client, collection, base)
+            except Exception as e:
+                logger.warning(f"セクション展開に失敗（{base}）: {e}")
+                full = None
+            if full:
+                doc.page_content = full
+                expanded.append(base)
+        elif meta.get("type") == "figure_description" and base in expanded:
+            continue  # 展開したセクション本文に図の説明が含まれている
+        result.append(doc)
+    return result
 
 class StaticDocRetriever(BaseRetriever):
     """静的なドキュメントリストを返すRetriever"""
@@ -113,6 +196,13 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
             doc.metadata["original_score"] = score
             top_docs.append(doc)
 
+        # 小さいチャンクで見つけ、回答にはセクション全体を渡す（手順が途中で切れないように）
+        top_docs = expand_sections(client, self.vectorstore.collection_name, top_docs)
+        for doc in top_docs:
+            label = source_label(doc.metadata)
+            if label:
+                doc.page_content = f"{label}\n{doc.page_content}"
+
         logger.info("🔄 検索完了")
 
         # ログ用（ID＋スコア）
@@ -149,7 +239,9 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
 
         chain = RetrievalQA.from_chain_type(
             self.llm,
+            chain_type="stuff",
             retriever=retriever,
+            chain_type_kwargs={"prompt": QA_PROMPT},
             verbose=False
         )
 
