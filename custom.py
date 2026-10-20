@@ -45,6 +45,29 @@ def pop_last_sources() -> list:
     return sources
 
 
+QUERY_REWRITE_PROMPT = """あなたは歯科医療・歯科機器（RAYFace など）の資料検索のための検索クエリ作成者です。
+ユーザーの質問から、資料の該当箇所を見つけるための検索クエリを2つ作ってください。
+- 質問の核心（何について知りたいか）だけを表す。質問者が示した前提や候補は、どちらのクエリにも含めない。
+  例: 「Aの設定はBとCでいいですか？」→ B・C は含めず「Aの設定方法」「A 設定 位置」のようにする。
+- 1つ目: 質問の核心を短い文で。2つ目: 資料で使われていそうな機能名・画面名・専門用語のキーワードの並び。
+出力JSON: {{"queries": ["...", "..."]}}
+
+質問: {question}"""
+
+
+def rewrite_queries(llm, query: str) -> List[str]:
+    """誘導的な語に検索が引っ張られないよう、質問の核心を表す検索文を追加する（失敗時は元の質問のみ）"""
+    import json, re
+    try:
+        text = llm.invoke(QUERY_REWRITE_PROMPT.format(question=query)).content
+        m = re.search(r"\{.*\}", text, re.S)
+        extra = [q for q in json.loads(m.group(0)).get("queries", []) if isinstance(q, str) and q.strip()] if m else []
+    except Exception as e:
+        logger.warning(f"検索クエリの作成に失敗: {e}")
+        extra = []
+    return [query] + extra[:2]
+
+
 MAX_SECTIONS = 6          # 回答に渡すセクション（展開後）の最大数
 _section_cache: dict = {}  # base_name -> セクション全文（データ更新時はアプリ再起動で反映）
 
@@ -153,12 +176,25 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
         TOP_K = 15
         FIGURE_K = 5  # 図の説明文は本文とは別枠で取得（件数が多く本文を押し出さないように）
 
+        queries = rewrite_queries(self.llm, query)
+        logger.info(f"🔎 検索クエリ: {queries}")
+
         def search(types, k):
-            return self.vectorstore.similarity_search_with_score(
-                query,
-                k=k,
-                filter=Filter(must=[FieldCondition(key="type", match=MatchAny(any=types))]),
-            )
+            # 複数の検索文で検索し、順位の融合（RRF）でまとめる。
+            # 類似度の値で並べると、元の質問の誘導的な語で上位に来た文書に、
+            # 言い換えた検索文で見つかった文書が押し出されるため（eval occ-07 で確認）
+            fused, best = {}, {}
+            for q in queries:
+                results = self.vectorstore.similarity_search_with_score(
+                    q, k=k, filter=Filter(must=[FieldCondition(key="type", match=MatchAny(any=types))]),
+                )
+                for rank, (doc, score) in enumerate(results, start=1):
+                    key = self._get_vector_id(doc) or doc.page_content[:100]
+                    fused[key] = fused.get(key, 0.0) + 1.0 / (60 + rank)
+                    if key not in best or score > best[key][1]:
+                        best[key] = (doc, score)
+            order = sorted(fused, key=fused.get, reverse=True)[:k]
+            return [best[key] for key in order]
 
         # ★ 本文・論文の上位15件 + 図の説明文の上位5件
         docs_and_scores = (
