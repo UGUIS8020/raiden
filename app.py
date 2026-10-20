@@ -5,12 +5,13 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from cache_manager import setup_cache_cleanup_scheduler
 from prompts import SYSTEM_PROMPT_TEMPLATE
 from chatbot_utils import search_cached_answer, store_response_in_qdrant
+import os
 import time
 
 load_dotenv()
 
 # キャッシュ機能の切り替え（True: 有効 / False: 無効）
-CACHE_ENABLED = True
+CACHE_ENABLED = False
 
 index = None
 
@@ -64,7 +65,6 @@ def respond(message, chat_history):
     
     MAX_HISTORY_LENGTH = 3
     chat_history = chat_history[-MAX_HISTORY_LENGTH:]
-    history.messages = history.messages[-MAX_HISTORY_LENGTH * 2:]
 
     return "", chat_history
 
@@ -104,7 +104,11 @@ if __name__ == "__main__":
         api.index = index
         
         # APIサーバーをバックグラウンドで起動
-        api_started = start_api_background(host='0.0.0.0', port=5001)
+        # 外部公開が不要なら .env で API_HOST=127.0.0.1 を指定してください
+        api_host = os.getenv('API_HOST', '0.0.0.0')
+        if api_host != '127.0.0.1' and not api.API_KEY:
+            print("⚠️ API is exposed without authentication. Set RAIDEN_API_KEY in .env to require X-API-Key.")
+        api_started = start_api_background(host=api_host, port=5001)
         
         if api_started:
             print("🎉 Gradio UI + API Server both running!")

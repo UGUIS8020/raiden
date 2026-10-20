@@ -124,17 +124,9 @@ def store_response_in_qdrant(question, answer, collection_name=CACHE_COLLECTION_
             print(f"コレクション {collection_name} に接続しました")
             print(f"現在のポイント数: {collection_info.points_count}")
         except Exception as e:
-            print(f"コレクション {collection_name} が見つかりません: {e}")
-            collections = client.get_collections()
-            print(f"利用可能なコレクション: {[c.name for c in collections.collections]}")
-            
-            print(f"代替として 'raiden-main' コレクションを使用します")
-            collection_name = "raiden-main"
-            try:
-                collection_info = client.get_collection(collection_name=collection_name)
-            except Exception as e:
-                print(f"代替コレクションへの接続も失敗: {e}")
-                return False
+            # 知識ベース(raiden-main)を汚さないよう、キャッシュ用コレクションが無ければ保存しない
+            print(f"コレクション {collection_name} が見つかりません。キャッシュ保存をスキップします: {e}")
+            return False
         
         # AI拡張情報を取得
         enhanced_data = enhance_with_ai(question, answer)
@@ -263,38 +255,11 @@ def check_previous_responses(query, collection_name=CACHE_COLLECTION_NAME):
             
             if collection_info.points_count == 0:
                 print(f"コレクション {collection_name} にポイントが存在しません")
-                # 代替としてraiden-mainコレクションを試す
-                print(f"代替コレクション 'raiden-main' を試みます")
-                try:
-                    alt_collection_info = client.get_collection(collection_name="raiden-main")
-                    print(f"代替コレクション統計: ポイント数={alt_collection_info.points_count}")
-                    
-                    if alt_collection_info.points_count > 0:
-                        collection_name = "raiden-main"
-                        print(f"代替コレクション 'raiden-main' を使用します")
-                    else:
-                        print(f"代替コレクションにもポイントがありません")
-                        return {"found": False}
-                except Exception as e:
-                    print(f"代替コレクションへのアクセスエラー: {e}")
-                    return {"found": False}
-                
+                return {"found": False}
+
         except Exception as e:
             print(f"コレクション {collection_name} への接続エラー: {e}")
-            # 利用可能なコレクションを表示
-            collections = client.get_collections()
-            print(f"利用可能なコレクション: {[c.name for c in collections.collections]}")
-            
-            # 代替としてraiden-mainコレクションを試す
-            if "raiden-main" in [c.name for c in collections.collections]:
-                try:
-                    collection_name = "raiden-main"
-                    print(f"代替コレクション 'raiden-main' を使用します")
-                except Exception as e:
-                    print(f"代替コレクションへのアクセスエラー: {e}")
-                    return {"found": False}
-            else:
-                return {"found": False}
+            return {"found": False}
         
         # 類似度しきい値を出力
         print(f"類似度閾値: {SIMILARITY_THRESHOLD}")
@@ -318,18 +283,9 @@ def check_previous_responses(query, collection_name=CACHE_COLLECTION_NAME):
         except Exception as e:
             print(f"フィルター付き検索エラー: {e}")
             search_results = []
-        
-        # もし結果がなければ、フィルターなしで再試行
-        if not search_results:
-            print("フィルターなしで再検索します")
-            search_results = client.query_points(
-                collection_name=collection_name,
-                query=query_embedding,
-                limit=5
-            ).points
-            print(f"フィルターなし検索結果: {len(search_results)}件")
-        
+
         # 見つからない場合は早期リターン
+        # （フィルターなし検索はQ&A以外のデータを回答として返す恐れがあるため行わない）
         if not search_results:
             print("マッチする質問が見つかりませんでした")
             return {"found": False}

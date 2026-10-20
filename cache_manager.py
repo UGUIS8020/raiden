@@ -119,9 +119,13 @@ def setup_cache_cleanup_scheduler(
     """定期的なキャッシュクリーンアップスケジューラー"""
     
     # 環境変数から設定を読み込み
-    expiration_days = expiration_days or int(os.getenv('CACHE_EXPIRATION_DAYS', str(DEFAULT_EXPIRATION_DAYS)))
-    hour = hour or int(os.getenv('CACHE_CLEANUP_HOUR', str(DEFAULT_CLEANUP_HOUR)))
-    minute = minute or int(os.getenv('CACHE_CLEANUP_MINUTE', str(DEFAULT_CLEANUP_MINUTE)))
+    # 0 を明示指定した場合も有効になるよう None で判定
+    if expiration_days is None:
+        expiration_days = int(os.getenv('CACHE_EXPIRATION_DAYS', str(DEFAULT_EXPIRATION_DAYS)))
+    if hour is None:
+        hour = int(os.getenv('CACHE_CLEANUP_HOUR', str(DEFAULT_CLEANUP_HOUR)))
+    if minute is None:
+        minute = int(os.getenv('CACHE_CLEANUP_MINUTE', str(DEFAULT_CLEANUP_MINUTE)))
     
     scheduler = BackgroundScheduler()
     

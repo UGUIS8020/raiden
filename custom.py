@@ -49,24 +49,22 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
     ) -> str:
         """ツールの実行メソッド"""
         from langchain.chains.retrieval_qa.base import RetrievalQA
-        from qdrant_client import QdrantClient
         from qdrant_client.models import Filter, FieldCondition, MatchAny
-        import os
 
         TOP_K = 15
+        FIGURE_K = 5  # 図の説明文は本文とは別枠で取得（件数が多く本文を押し出さないように）
 
-        # ★ いきなり上位15件だけ取得（type=content のみ）
-        docs_and_scores = self.vectorstore.similarity_search_with_score(
-            query, 
-            k=TOP_K,
-            filter=Filter(
-                must=[
-                    FieldCondition(
-                        key="type",
-                        match=MatchAny(any=["content", "pubmed_paper"])
-                    )
-                ]
+        def search(types, k):
+            return self.vectorstore.similarity_search_with_score(
+                query,
+                k=k,
+                filter=Filter(must=[FieldCondition(key="type", match=MatchAny(any=types))]),
             )
+
+        # ★ 本文・論文の上位15件 + 図の説明文の上位5件
+        docs_and_scores = (
+            search(["content", "pubmed_paper"], TOP_K)
+            + search(["figure_description"], FIGURE_K)
         )
 
         logger.debug(f"📥 {len(docs_and_scores)}件のドキュメントを取得")
@@ -76,21 +74,17 @@ class CustomVectorStoreQATool(BaseVectorStoreTool, BaseTool):
             logger.warning("⚠ 類似ドキュメントが1件も見つかりませんでした")
             return "関連する文書が見つかりませんでした。別の聞き方で質問してみてください。"
 
-        # similarity_search_with_score はすでにスコア順で返してくれる想定なので、
-        # 追加の sorted() は不要（保険で残したいならここで sorted してもよい）
-        top_docs_with_scores = docs_and_scores  # [(doc, score), ...] 最大15件
+        top_docs_with_scores = docs_and_scores  # [(doc, score), ...] 本文最大15件 + 図最大5件
 
-        # ★ 上位15件だけpayloadを取得（高速化）
-        client = QdrantClient(
-            url=os.getenv('QDRANT_URL'),
-            api_key=os.getenv('QDRANT_API_KEY'),
-        )
+        # ★ 取得した文書だけpayloadを取得（高速化）
+        # VectorStoreが保持しているクライアントを再利用（毎回の接続を避ける）
+        client = self.vectorstore.client
 
         raw_vector_ids = [self._get_vector_id(doc) for doc, _ in top_docs_with_scores]
         vector_ids = [vid for vid in raw_vector_ids if vid is not None]
 
         points = client.retrieve(
-            collection_name="raiden-main",
+            collection_name=self.vectorstore.collection_name,
             ids=vector_ids,
             with_payload=True
         )

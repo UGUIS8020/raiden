@@ -1,0 +1,4 @@
+# Dataset builder (ingest/*.py). Used on a local PC only; not needed on the server.
+-r ../requirements.txt
+pymupdf==1.26.4
+pillow==11.3.0

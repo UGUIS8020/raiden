@@ -40,10 +40,11 @@ LANGCHAIN_API_KEY = os.getenv('LANGCHAIN_API_KEY')
 QDRANT_URL = os.getenv('QDRANT_URL')
 QDRANT_API_KEY = os.getenv('QDRANT_API_KEY')
 
-# LangSmith設定
-os.environ['LANGCHAIN_TRACING_V2'] = "true"
-os.environ['LANGCHAIN_ENDPOINT'] = "https://api.smith.langchain.com"
-os.environ['LANGCHAIN_PROJECT'] = "LangSmith-test"
+# LangSmith設定（APIキーがある場合のみトレースを有効化）
+if LANGCHAIN_API_KEY:
+    os.environ['LANGCHAIN_TRACING_V2'] = "true"
+    os.environ['LANGCHAIN_ENDPOINT'] = "https://api.smith.langchain.com"
+    os.environ['LANGCHAIN_PROJECT'] = "LangSmith-test"
 
 # Qdrant初期化
 collection_name = "raiden-main"
@@ -96,23 +97,11 @@ def create_tools(index: VectorStoreIndexWrapper, llm) -> List[BaseTool]:
     try:
         vectorstore_info = VectorStoreInfo(
             name="dental_knowledge_base",
-            description="歯科医療・歯科医院の運営に関するあらゆる情報を含む専門データベース。自家歯牙移植・歯牙再植の臨床情報、診療報酬改定・点数・加算・施設基準、賃上げ・給与・人件費、保険請求、医院経営・運営、学術論文など幅広い情報を収録しています。ユーザーの質問に関連する情報が含まれている可能性があれば、積極的にこのツールを使用してください。",
+            description="歯科医療・歯科医院の運営に関するあらゆる情報を含む専門データベース。自家歯牙移植・歯牙再植の臨床情報、診療報酬改定・点数・加算・施設基準、賃上げ・給与・人件費、保険請求、医院経営・運営、学術論文、歯科機器の取扱説明書（RAYFace フェイススキャナーの撮影・3D構築・データマッチング・設定・エラーメッセージ等）など幅広い情報を収録しています。ユーザーの質問に関連する情報が含まれている可能性があれば、積極的にこのツールを使用してください。",
             vectorstore=index.vectorstore,
-            search_kwargs={
-                "k": 15,
-                "score_threshold": 0.6,
-                "filter": {  # ← これを追加
-                    "must": [
-                        {
-                            "key": "type",
-                            "match": {"value": "content"}
-                        }
-                    ]
-                }
-            }
         )
-        
-        # カスタムツールを使う
+
+        # カスタムツールを使う（検索件数・typeフィルタは custom.py 側で指定）
         qa_tool = CustomVectorStoreQATool(
             name=vectorstore_info.name,
             description=vectorstore_info.description,

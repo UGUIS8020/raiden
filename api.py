@@ -13,6 +13,8 @@ from flask_cors import CORS
 from chatbot_engine import chat, get_index
 from dotenv import load_dotenv
 from langchain_community.chat_message_histories import ChatMessageHistory
+from prompts import SYSTEM_PROMPT_TEMPLATE
+import hmac
 import time
 import threading
 import sys
@@ -28,6 +30,11 @@ CORS(app)  # CORS設定
 # グローバル変数
 index = None
 
+MAX_QUESTION_LENGTH = 5000
+
+# APIキー（設定されている場合のみ /api/question で X-API-Key ヘッダーを要求）
+API_KEY = os.getenv('RAIDEN_API_KEY')
+
 def initialize_index():
     """インデックスを初期化"""
     global index
@@ -41,67 +48,47 @@ def initialize_index():
         return False
 
 def create_prompt(question):
-    """質問用のプロンプトを生成"""
-    return f"""
-    あなたは自家歯牙移植の専門知識を持つ歯科医師として回答してください。
-
-    ## 基本原則
-    1. 回答は日本語で行い、医学的正確性を最優先としてください
-    2. 必ずベクトル検索ツールを使用し、検索結果のみを参考に回答してください
-    3. 検索結果の上位文書から重要な情報（数値データ、症例、図表情報）を見逃さないよう特に注意してください
-    4. 文書に記載がない情報については「検索した文書には記載されていません」と明記してください
-
-    ## 回答構成（該当する要素を含めてください）
-    - **直接的な回答**: 質問に対する明確な答え
-    - **詳細な説明**: メカニズム、手順、基準など
-    - **根拠となるデータ**: 数値、期間、成功率、症例データなど
-    - **臨床的意義**: 実践的な応用や注意点
-    - **リスクや合併症**: 該当する場合
-    - **参考症例**: 具体的な事例がある場合
-
-    ## 情報の優先順位
-    【最優先】数値データ、図表付き症例、実験結果
-    【高優先】メカニズム、診断基準、治療方法、合併症
-    【標準】定義、分類、一般的説明
-
-    ## 複合質問の処理
-    質問に複数の要素が含まれる場合：
-    **STEP 1**: 質問を個別要素に分解
-    **STEP 2**: 各要素について上記の構成で回答
-    **STEP 3**: 要素間の関連性があれば説明
-
-    ## 専門用語への配慮
-    - 重要な専門用語には簡潔な説明を付加
-    - 略語の正式名称を併記
-    - 患者説明に使える表現も提供（適切な場合）
-
-    ## 専門性向上のための指示
-    - 検索結果に含まれる専門用語は積極的に使用
-    - メカニズムの詳細説明を重視
-    - 臨床的意義や病態との関連も含める
-    - 段階的なプロセスは番号付きで整理
-
-    質問: {question}
-
-    上記の原則に従って、検索結果を最大限活用した包括的で実用的な回答を提供してください。
-    """
+    """質問用のプロンプトを生成（Gradio UIと共通のテンプレートを使用）"""
+    return SYSTEM_PROMPT_TEMPLATE.format(question=question)
 
 @app.route('/api/question', methods=['POST'])
 def api_question():
     """質問APIエンドポイント"""
     start_time = time.time()
-    
+
+    # APIキー認証（RAIDEN_API_KEY が設定されている場合のみ）
+    if API_KEY and not hmac.compare_digest(request.headers.get('X-API-Key', ''), API_KEY):
+        return jsonify({
+            "success": False,
+            "error": "認証に失敗しました",
+            "error_code": "UNAUTHORIZED"
+        }), 401
+
     try:
         # リクエストデータの検証
-        data = request.json
-        if not data or 'question' not in data:
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or 'question' not in data:
             return jsonify({
                 "success": False,
                 "error": "質問が提供されていません",
                 "error_code": "MISSING_QUESTION"
             }), 400
-        
+
         question = data['question']
+        if not isinstance(question, str):
+            return jsonify({
+                "success": False,
+                "error": "質問は文字列で指定してください",
+                "error_code": "INVALID_QUESTION"
+            }), 400
+
+        if len(question) > MAX_QUESTION_LENGTH:
+            return jsonify({
+                "success": False,
+                "error": f"質問が長すぎます（{MAX_QUESTION_LENGTH}文字以内）",
+                "error_code": "QUESTION_TOO_LONG"
+            }), 400
+
         if not question.strip():
             return jsonify({
                 "success": False,
@@ -155,7 +142,7 @@ def api_question():
         
         return jsonify({
             "success": False,
-            "error": f"処理中にエラーが発生しました: {error_msg}",
+            "error": "処理中にエラーが発生しました",
             "error_code": "PROCESSING_ERROR",
             "response_time": round(elapsed_time, 3),
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
@@ -182,9 +169,9 @@ def health_check():
         return jsonify(status)
         
     except Exception as e:
+        print(f"❌ Health check error: {str(e)}")
         return jsonify({
             "status": "unhealthy",
-            "error": str(e),
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
         }), 500
 
@@ -288,7 +275,9 @@ def start_api_background(host='127.0.0.1', port=5001):
     # ヘルスチェックで起動を確認
     try:
         import requests
-        response = requests.get(f'http://{host}:{port}/api/health', timeout=5)
+        # 0.0.0.0 は接続先として使えない環境（Windows等）があるためループバックで確認
+        check_host = '127.0.0.1' if host == '0.0.0.0' else host
+        response = requests.get(f'http://{check_host}:{port}/api/health', timeout=5)
         if response.status_code == 200:
             print(f"✅ API Server is running at http://{host}:{port}")
             return True
