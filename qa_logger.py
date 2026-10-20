@@ -11,7 +11,6 @@ QA_LOG_ENABLED=false で記録を止められる。
 
 import logging
 import os
-import subprocess
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -37,11 +36,22 @@ def _get_table():
 
 
 def _code_version() -> str:
+    """.git を直接読んでコミットIDを得る（本番の systemd は PATH に git がないため git コマンドは使わない）"""
     try:
-        return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=Path(__file__).parent,
-                              capture_output=True, text=True, timeout=5).stdout.strip() or "unknown"
+        git = Path(__file__).parent / ".git"
+        head = (git / "HEAD").read_text().strip()
+        if not head.startswith("ref: "):
+            return head[:7]
+        ref = head[5:]
+        ref_file = git / ref
+        if ref_file.exists():
+            return ref_file.read_text().strip()[:7]
+        for line in (git / "packed-refs").read_text().splitlines():
+            if line.endswith(" " + ref):
+                return line.split()[0][:7]
     except Exception:
-        return "unknown"
+        pass
+    return "unknown"
 
 
 CODE_VERSION = _code_version()
